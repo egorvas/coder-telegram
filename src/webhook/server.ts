@@ -62,7 +62,10 @@ export function startWebhookServer(bot: Telegraf): void {
         return;
       }
 
-      const taskName = notification.payload.labels.task;
+      const { notification_name, title, labels } = notification.payload;
+      const taskName = labels.task ?? '';
+      console.log(`Webhook: [${notification_name}] task="${taskName}" title="${title}"`);
+
       const taskId = taskSessions.getIdByName(taskName);
       if (!taskId) {
         console.warn(`Webhook: no session for task name "${taskName}"`);

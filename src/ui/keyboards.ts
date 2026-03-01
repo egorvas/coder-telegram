@@ -1,5 +1,6 @@
 import { Markup } from 'telegraf';
 import type { Workspace, CoderTask, CoderTemplate, CoderPreset } from '../coder/types.js';
+import { config } from '../config.js';
 
 const MAX_NAME = 40;
 function truncate(s: string, max = MAX_NAME): string {
@@ -41,6 +42,7 @@ export function taskMenuKeyboard(taskId: string) {
       Markup.button.callback('✏️ Append', `task:append:${taskId}`),
       Markup.button.callback('🗑 Delete', `task:delete:${taskId}`),
     ],
+    [Markup.button.url('🌐 Open in Coder', `${config.coderApiUrl}/tasks/${taskId}`)],
     [Markup.button.callback('« Tasks', 'dashboard:back')],
   ]);
 }
@@ -70,6 +72,7 @@ export function workspaceActionKeyboard(ws: Workspace) {
         ? Markup.button.callback('⏹ Stop', `ws:stop:${truncate(ws.name, 51)}`)
         : Markup.button.callback('▶️ Start', `ws:start:${truncate(ws.name, 50)}`),
     ],
+    [Markup.button.url('🌐 Open in Coder', `${config.coderApiUrl}/@me/${ws.name}`)],
     [Markup.button.callback('« Back', 'ws:back')],
   ]);
 }
@@ -88,15 +91,17 @@ export function templateListKeyboard(templates: CoderTemplate[]) {
 }
 
 // 2.7 Preset list (read-only browser in template section)
-export function presetListKeyboard(presets: CoderPreset[], _templateName: string) {
-  const rows = presets.map((p) => [
-    Markup.button.callback(
-      `${p.Name}${p.Description ? ` — ${truncate(p.Description, 30)}` : ''}${p.Default ? ' ✓' : ''}`,
-      `tpl:preset:noop`
-    ),
+export function presetListKeyboard(presets: CoderPreset[], templateName: string) {
+  return Markup.inlineKeyboard([
+    ...presets.map((p) => [
+      Markup.button.callback(
+        `${p.Name}${p.Description ? ` — ${truncate(p.Description, 30)}` : ''}${p.Default ? ' ✓' : ''}`,
+        `tpl:preset:noop`
+      ),
+    ]),
+    [Markup.button.url('🌐 Open in Coder', `${config.coderApiUrl}/templates/${templateName}`)],
+    [Markup.button.callback('« Templates', 'menu:templates')],
   ]);
-  rows.push([Markup.button.callback('« Templates', 'menu:templates')]);
-  return Markup.inlineKeyboard(rows);
 }
 
 // 2.8 Wizard: template selection

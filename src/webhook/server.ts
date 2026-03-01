@@ -4,6 +4,7 @@ import type { Telegraf } from 'telegraf';
 import { config } from '../config.js';
 import { taskSessions } from '../store/task-sessions.js';
 import { notifyTaskComplete } from '../flows/task-completion.js';
+import type { WebhookMeta } from '../flows/task-completion.js';
 
 interface CoderNotification {
   _version: string;
@@ -71,7 +72,11 @@ export function startWebhookServer(bot: Telegraf): void {
 
       // Notify asynchronously — respond immediately
       res.writeHead(200).end('OK');
-      notifyTaskComplete(taskId, bot).catch((err: unknown) => {
+      const meta: WebhookMeta = {
+        title: notification.payload.title,
+        body: notification.payload.body,
+      };
+      notifyTaskComplete(taskId, bot, meta).catch((err: unknown) => {
         console.error('Webhook: notification failed:', err);
       });
     });

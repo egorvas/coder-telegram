@@ -62,6 +62,7 @@ export function startWebhookServer(bot: Telegraf): void {
         return;
       }
 
+      console.log('Webhook payload:', JSON.stringify(notification, null, 2));
       const { notification_name, title, labels } = notification.payload;
       const taskName = labels.task ?? '';
       console.log(`Webhook: [${notification_name}] task="${taskName}" title="${title}"`);

@@ -24,8 +24,8 @@ export async function notifyTaskComplete(taskId: string, bot: Telegraf, meta?: W
       ? `\n\n_${task.initial_prompt.slice(0, 200)}${task.initial_prompt.length > 200 ? '…' : ''}_`
       : '';
 
-    const header = meta
-      ? `🤖 *${meta.title}*\n${meta.body}\n\n`
+    const header = meta?.title
+      ? `🤖 *${meta.title}*${meta.body ? `\n${meta.body}` : ''}\n\n`
       : '🤖 *AI Task Update*\n\n';
 
     await bot.telegram.sendMessage(

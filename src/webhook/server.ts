@@ -62,10 +62,15 @@ export function startWebhookServer(bot: Telegraf): void {
         return;
       }
 
-      console.log('Webhook payload:', JSON.stringify(notification, null, 2));
       const { notification_name, title, labels } = notification.payload;
       const taskName = labels.task ?? '';
-      console.log(`Webhook: [${notification_name}] task="${taskName}" title="${title}"`);
+      console.log(`Webhook: [${notification_name}] task="${taskName}"`);
+
+      if (notification_name !== 'Task Idle') {
+        console.log(`Webhook: ignoring event "${notification_name}"`);
+        res.writeHead(200).end('OK');
+        return;
+      }
 
       const taskId = taskSessions.getIdByName(taskName);
       if (!taskId) {

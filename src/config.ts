@@ -12,5 +12,4 @@ export const config = {
   coderApiToken: process.env.CODER_API_TOKEN!,
   webhookPort: process.env.WEBHOOK_PORT ? parseInt(process.env.WEBHOOK_PORT, 10) : undefined,
   webhookSecret: process.env.WEBHOOK_SECRET,
-  sessionFile: process.env.SESSION_FILE ?? './data/sessions.json',
 };

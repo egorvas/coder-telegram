@@ -1,0 +1,38 @@
+{
+  "name": "coder-telegram",
+  "version": "0.1.0",
+  "description": "Telegram bot for interacting with Coder via API",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "type-check": "tsc --noEmit",
+    "spec:list": "openspec list",
+    "spec:generate": "openspec generate",
+    "spec:generate:all": "openspec generate --all",
+    "spec:validate": "openspec validate",
+    "spec:sync": "openspec sync"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/egorvas/coder-telegram.git"
+  },
+  "keywords": [
+    "telegram",
+    "coder",
+    "bot"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^25.3.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@fission-ai/openspec": "^1.2.0",
+    "telegraf": "^4.16.3"
+  }
+}

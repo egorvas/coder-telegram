@@ -5,9 +5,17 @@ import { config } from '../config.js';
 import { taskSessions } from '../store/task-sessions.js';
 import { notifyTaskComplete } from '../flows/task-completion.js';
 
-interface WebhookPayload {
-  task_id: string;
-  status: string;
+interface CoderNotification {
+  _version: string;
+  msg_id: string;
+  payload: {
+    notification_name: string;
+    user_username: string;
+    labels: { task?: string; workspace?: string };
+    actions: Array<{ label: string; url: string }>;
+    title: string;
+    body: string;
+  };
 }
 
 function verifySignature(body: string, signature: string, secret: string): boolean {
@@ -43,27 +51,27 @@ export function startWebhookServer(bot: Telegraf): void {
       }
 
       // Parse payload
-      let payload: WebhookPayload;
+      let notification: CoderNotification;
       try {
-        payload = JSON.parse(body) as WebhookPayload;
-        if (!payload.task_id) throw new Error('Missing task_id');
+        notification = JSON.parse(body) as CoderNotification;
+        if (!notification.payload?.labels?.task) throw new Error('Missing payload.labels.task');
       } catch {
         console.error('Webhook: malformed payload:', body);
         res.writeHead(400).end('Bad Request');
         return;
       }
 
-      // Route to task session
-      const session = taskSessions.get(payload.task_id);
-      if (!session) {
-        console.warn(`Webhook: no session for task ${payload.task_id}`);
+      const taskName = notification.payload.labels.task;
+      const taskId = taskSessions.getIdByName(taskName);
+      if (!taskId) {
+        console.warn(`Webhook: no session for task name "${taskName}"`);
         res.writeHead(200).end('OK');
         return;
       }
 
       // Notify asynchronously — respond immediately
       res.writeHead(200).end('OK');
-      notifyTaskComplete(payload.task_id, bot).catch((err: unknown) => {
+      notifyTaskComplete(taskId, bot).catch((err: unknown) => {
         console.error('Webhook: notification failed:', err);
       });
     });

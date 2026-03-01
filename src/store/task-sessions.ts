@@ -7,11 +7,20 @@ interface PendingAppend {
 }
 
 class TaskSessionStore {
-  private sessions = new Map<string, TaskSession>();
+  private sessions = new Map<string, TaskSession>();       // taskId → session
+  private nameToId = new Map<string, string>();            // taskName → taskId
   private pendingAppends = new Map<number, PendingAppend>();
 
   register(taskId: string, chatId: number): void {
     this.sessions.set(taskId, { chatId });
+  }
+
+  registerName(taskName: string, taskId: string): void {
+    this.nameToId.set(taskName, taskId);
+  }
+
+  getIdByName(taskName: string): string | null {
+    return this.nameToId.get(taskName) ?? null;
   }
 
   get(taskId: string): TaskSession | null {

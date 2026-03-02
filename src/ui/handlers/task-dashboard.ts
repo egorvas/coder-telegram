@@ -8,6 +8,7 @@ import { uiState } from '../state.js';
 import { userStore } from '../../store/user-store.js';
 import type { CoderTask } from '../../coder/types.js';
 import { startWizard } from './wizard.js';
+import { log } from '../../utils/logger.js';
 
 interface TaskWithWorkspace {
   task: CoderTask;
@@ -56,7 +57,7 @@ export async function showTaskDashboard(ctx: Context): Promise<void> {
             allItems.push({ task, ownerId: r.value.ownerId });
           }
         } else {
-          console.warn(`Failed to fetch tasks for user ${usersWithKeys[i].userId}:`, r.reason);
+          log.warn('failed to fetch tasks', { userId: usersWithKeys[i].userId, err: String(r.reason) });
         }
       }
 

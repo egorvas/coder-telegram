@@ -1,6 +1,7 @@
 import { readFileSync, mkdirSync, writeFile } from 'node:fs';
 import { dirname } from 'node:path';
 import { config } from '../config.js';
+import { log } from '../utils/logger.js';
 
 interface TaskSession {
   chatId: number;
@@ -47,7 +48,7 @@ class TaskSessionStore {
         }
       }
       const total = [...this.users.values()].reduce((n, u) => n + u.sessions.size, 0);
-      console.log(`Sessions loaded: ${total} tasks across ${this.users.size} users`);
+      log.info('sessions loaded', { tasks: total, users: this.users.size });
     } catch {
       // File doesn't exist yet — start fresh
     }
@@ -63,7 +64,7 @@ class TaskSessionStore {
     const data: PersistedData = { users };
     mkdirSync(dirname(config.sessionFile), { recursive: true });
     writeFile(config.sessionFile, JSON.stringify(data, null, 2), (err) => {
-      if (err) console.error('Failed to save sessions:', err);
+      if (err) log.error('failed to save sessions', { err: String(err) });
     });
   }
 

@@ -1,6 +1,7 @@
 import { readFileSync, mkdirSync, writeFile } from 'node:fs';
 import { dirname } from 'node:path';
 import { config } from '../config.js';
+import { log } from '../utils/logger.js';
 
 interface UserRecord {
   coderApiKey?: string;
@@ -34,7 +35,7 @@ class UserStore {
           allowed: seeded?.allowed || record.allowed,
         });
       }
-      console.log(`User registry loaded: ${this.records.size} users`);
+      log.info('user registry loaded', { users: this.records.size });
     } catch {
       // File doesn't exist yet — start fresh
     }
@@ -53,7 +54,7 @@ class UserStore {
     }
     mkdirSync(dirname(config.sessionFile), { recursive: true });
     writeFile(config.sessionFile, JSON.stringify({ ...existing, registry }, null, 2), (err) => {
-      if (err) console.error('Failed to save user registry:', err);
+      if (err) log.error('failed to save user registry', { err: String(err) });
     });
   }
 

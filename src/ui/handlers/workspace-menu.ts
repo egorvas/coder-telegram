@@ -5,6 +5,7 @@ import { workspaceListKeyboard, workspaceActionKeyboard, confirmKeyboard } from 
 import { startWizard } from './wizard.js';
 import { uiState } from '../state.js';
 import { userStore } from '../../store/user-store.js';
+import { log } from '../../utils/logger.js';
 
 function clientOrReply(ctx: Context): ReturnType<typeof getCoderClient> {
   const userId = ctx.from?.id;
@@ -40,7 +41,7 @@ export async function showWorkspaceList(ctx: Context): Promise<void> {
             total++;
           }
         } else {
-          console.warn(`Failed to fetch workspaces for user ${usersWithKeys[i].userId}:`, r.reason);
+          log.warn('failed to fetch workspaces', { userId: usersWithKeys[i].userId, err: String(r.reason) });
         }
       }
 

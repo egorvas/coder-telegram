@@ -1,8 +1,10 @@
+import { log } from './utils/logger.js';
+
 const required = ['TELEGRAM_BOT_TOKEN', 'CODER_API_URL'] as const;
 
 const missing = required.filter((v) => !process.env[v]);
 if (missing.length > 0) {
-  console.error(`Missing required environment variables: ${missing.join(', ')}`);
+  log.error('missing required environment variables', { missing: missing.join(', ') });
   process.exit(1);
 }
 
@@ -19,4 +21,5 @@ export const config = {
   sessionFile: process.env.SESSION_FILE ?? './data/sessions.json',
   allowedUsers: parseIdList(process.env.ALLOWED_USERS),
   adminUsers: parseIdList(process.env.ADMIN_USERS),
+  logLevel: process.env.LOG_LEVEL ?? 'info',
 };

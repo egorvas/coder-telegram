@@ -1,4 +1,5 @@
 import type { Workspace, WorkspaceListResponse, WorkspaceBuild, CoderTemplate, CoderPreset, CoderTask } from './types.js';
+import { log } from '../utils/logger.js';
 
 // Escape all non-ASCII chars as \uXXXX so the HTTP body is pure ASCII.
 // Workaround for Coder server dropping leading UTF-8 bytes (e.g. Cyrillic Б = \xD0\x91 → 0x91).
@@ -18,6 +19,9 @@ export class CoderClient {
   }
 
   private async request<T>(path: string, options?: RequestInit): Promise<T> {
+    const method = options?.method ?? 'GET';
+    const start = Date.now();
+
     const res = await fetch(`${this.baseUrl}${path}`, {
       ...options,
       headers: {
@@ -27,10 +31,15 @@ export class CoderClient {
       },
     });
 
+    const durationMs = Date.now() - start;
+
     if (!res.ok) {
       const text = await res.text().catch(() => '');
+      log.error('coder api error', { method, path, status: res.status, durationMs });
       throw new Error(`Coder API error ${res.status}: ${text}`);
     }
+
+    log.debug('coder api', { method, path, status: res.status, durationMs });
 
     if (res.status === 204 || res.headers.get('content-length') === '0') {
       return undefined as T;

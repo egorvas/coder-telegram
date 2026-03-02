@@ -18,6 +18,24 @@ import { sanitizeText } from './utils/telegram.js';
 import { registerTemplateBrowserHandlers } from './ui/handlers/template-browser.js';
 import { registerAdminPanelHandlers, showAdminPanel } from './ui/handlers/admin-panel.js';
 import { CoderClient } from './coder/client.js';
+import { log } from './utils/logger.js';
+
+// ─── Middleware: update logger ────────────────────────────────────────────────
+bot.use((ctx, next) => {
+  const userId = ctx.from?.id;
+  const chatId = ctx.chat?.id;
+  if (ctx.callbackQuery && 'data' in ctx.callbackQuery) {
+    log.debug('tg callback', { action: ctx.callbackQuery.data, userId, chatId });
+  } else if (ctx.message && 'text' in ctx.message) {
+    const text = ctx.message.text;
+    if (text.startsWith('/')) {
+      log.debug('tg command', { command: text.split(' ')[0], userId, chatId });
+    } else {
+      log.debug('tg text', { userId, chatId });
+    }
+  }
+  return next();
+});
 
 // ─── Middleware: auth guard ───────────────────────────────────────────────────
 bot.use(async (ctx, next) => {
@@ -153,6 +171,6 @@ await bot.telegram.setMyCommands([
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 startPoller(bot, config.pollIntervalMs);
-console.log('Coder Telegram bot starting...');
+log.info('bot starting');
 await bot.launch();
-console.log('Bot is running.');
+log.info('bot running');

@@ -43,10 +43,21 @@ export function taskMenuKeyboard(taskId: string) {
     ],
     [
       Markup.button.callback('✏️ Append', `task:append:${taskId}`),
+      Markup.button.callback('🧠 Model', `task:model:${taskId}`),
       Markup.button.callback('🗑 Delete', `task:delete:${taskId}`),
     ],
     [Markup.button.url('🌐 Open in Coder', `${config.coderApiUrl}/tasks/me/${taskId}`)],
     [Markup.button.callback('« Tasks', 'dashboard:back')],
+  ]);
+}
+
+// 2.3a Model selection keyboard
+export function modelKeyboard(taskId: string) {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback('⚡ Haiku (fast)',    `task:model:set:${taskId}:haiku`)],
+    [Markup.button.callback('⚖️ Sonnet (balanced)', `task:model:set:${taskId}:sonnet`)],
+    [Markup.button.callback('🧠 Opus (smart)',    `task:model:set:${taskId}:opus`)],
+    [Markup.button.callback('« Back', `task:select:${taskId}`)],
   ]);
 }
 

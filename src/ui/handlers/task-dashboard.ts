@@ -1,7 +1,7 @@
 import type { Telegraf, Context } from 'telegraf';
 import { coderClient } from '../../bot.js';
 import { buildLogMessage } from '../../utils/telegram.js';
-import { taskListKeyboard, taskMenuKeyboard, confirmKeyboard } from '../keyboards.js';
+import { taskListKeyboard, taskMenuKeyboard, modelKeyboard, confirmKeyboard } from '../keyboards.js';
 import { taskSessions } from '../../store/task-sessions.js';
 import { uiState } from '../state.js';
 import type { CoderTask } from '../../coder/types.js';
@@ -149,6 +149,30 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
       await ctx.replyWithDocument(
         { source: Buffer.from(logs), filename: `${taskId.slice(0, 8)}-log.txt` },
         { caption: `Task \`${taskId.slice(0, 8)}\` — ${task.status}`, parse_mode: 'Markdown', ...taskMenuKeyboard(taskId) }
+      );
+    } catch (err) {
+      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+  // task:model:<id> → show model selection keyboard
+  bot.action(/^task:model:([^:]+)$/, async (ctx) => {
+    const taskId = ctx.match[1];
+    await ctx.answerCbQuery();
+    await ctx.editMessageReplyMarkup(modelKeyboard(taskId).reply_markup);
+  });
+
+  // task:model:set:<id>:<model> → send /model <model> as append
+  bot.action(/^task:model:set:([^:]+):(.+)$/, async (ctx) => {
+    const taskId = ctx.match[1];
+    const model = ctx.match[2];
+    await ctx.answerCbQuery();
+    try {
+      await coderClient.appendTaskPrompt(taskId, `/model ${model}`);
+      await ctx.editMessageReplyMarkup(taskMenuKeyboard(taskId).reply_markup);
+      await ctx.reply(
+        `Model set to \`${model}\` for task \`${taskId.slice(0, 8)}\`.`,
+        { parse_mode: 'Markdown' }
       );
     } catch (err) {
       await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);

@@ -70,7 +70,7 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
         : '';
       await ctx.editMessageText(
         `*${name}*\nStatus: ${task.status}${prompt}`,
-        { parse_mode: 'Markdown', ...taskMenuKeyboard(taskId) }
+        { parse_mode: 'Markdown', ...taskMenuKeyboard(taskId, task.workspace_name) }
       );
     } catch (err) {
       await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
@@ -88,7 +88,7 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
       ]);
       await ctx.reply(
         buildLogMessage(taskId, task.status, logs),
-        { parse_mode: 'Markdown', ...taskMenuKeyboard(taskId) }
+        { parse_mode: 'Markdown', ...taskMenuKeyboard(taskId, task.workspace_name) }
       );
     } catch (err) {
       await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
@@ -148,7 +148,7 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
       }
       await ctx.replyWithDocument(
         { source: Buffer.from(logs), filename: `${taskId.slice(0, 8)}-log.txt` },
-        { caption: `Task \`${taskId.slice(0, 8)}\` — ${task.status}`, parse_mode: 'Markdown' }
+        { caption: `Task \`${taskId.slice(0, 8)}\` — ${task.status}`, parse_mode: 'Markdown', ...taskMenuKeyboard(taskId, task.workspace_name) }
       );
     } catch (err) {
       await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);

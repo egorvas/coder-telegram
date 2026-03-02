@@ -35,8 +35,9 @@ export function taskListKeyboard(tasks: CoderTask[]) {
 }
 
 // 2.3 Task submenu — actions for a specific task
-export function taskMenuKeyboard(taskId: string) {
-  return Markup.inlineKeyboard([
+export function taskMenuKeyboard(taskId: string, workspaceName?: string) {
+  type Btn = ReturnType<typeof Markup.button.callback> | ReturnType<typeof Markup.button.url>;
+  const rows: Btn[][] = [
     [
       Markup.button.callback('📋 Logs', `task:logs:${taskId}`),
       Markup.button.callback('📄 Full Log', `task:fulllog:${taskId}`),
@@ -45,9 +46,12 @@ export function taskMenuKeyboard(taskId: string) {
       Markup.button.callback('✏️ Append', `task:append:${taskId}`),
       Markup.button.callback('🗑 Delete', `task:delete:${taskId}`),
     ],
-    [Markup.button.url('🌐 Open in Coder', `${config.coderApiUrl}/tasks/${taskId}`)],
-    [Markup.button.callback('« Tasks', 'dashboard:back')],
-  ]);
+  ];
+  if (workspaceName) {
+    rows.push([Markup.button.url('🌐 Open in Coder', `${config.coderApiUrl}/@me/${workspaceName}`)]);
+  }
+  rows.push([Markup.button.callback('« Tasks', 'dashboard:back')]);
+  return Markup.inlineKeyboard(rows);
 }
 
 // 2.4 Workspace list — one button per ws + New Workspace

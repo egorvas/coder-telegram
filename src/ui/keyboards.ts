@@ -40,7 +40,7 @@ export function taskListKeyboard(tasks: CoderTask[]) {
 }
 
 // 2.3 Task submenu — actions for a specific task
-export function taskMenuKeyboard(taskId: string, status?: string) {
+export function taskMenuKeyboard(taskId: string) {
   type Btn = ReturnType<typeof Markup.button.callback> | ReturnType<typeof Markup.button.url>;
   const rows: Btn[][] = [
     [
@@ -53,11 +53,6 @@ export function taskMenuKeyboard(taskId: string, status?: string) {
       Markup.button.callback('🗑 Delete', `task:delete:${taskId}`),
     ],
   ];
-  if (status === 'active' || status === 'initializing') {
-    rows.push([Markup.button.callback('⏸ Pause', `task:pause:${taskId}`)]);
-  } else if (status === 'paused') {
-    rows.push([Markup.button.callback('▶️ Resume', `task:resume:${taskId}`)]);
-  }
   rows.push([Markup.button.url('🌐 Open in Coder', `${config.coderApiUrl}/tasks/me/${taskId}`)]);
   rows.push([Markup.button.callback('« Tasks', 'dashboard:back')]);
   return Markup.inlineKeyboard(rows);

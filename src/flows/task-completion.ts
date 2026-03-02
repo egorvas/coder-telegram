@@ -16,7 +16,7 @@ export async function notifyTaskComplete(taskId: string, chatId: number, userId:
     await bot.telegram.sendMessage(
       chatId,
       `🤖 *AI Task Update*\n\n*${name}* — ${task.status}${prompt}`,
-      { parse_mode: 'Markdown', ...taskMenuKeyboard(taskId, task.status) }
+      { parse_mode: 'Markdown', ...taskMenuKeyboard(taskId) }
     );
   } catch (err) {
     await bot.telegram.sendMessage(

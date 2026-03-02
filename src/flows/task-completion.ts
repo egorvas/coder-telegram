@@ -16,9 +16,13 @@ export async function notifyTaskComplete(taskId: string, chatId: number, userId:
       ? `\n\n_${task.initial_prompt.slice(0, 200)}${task.initial_prompt.length > 200 ? '…' : ''}_`
       : '';
 
+    const statusLabel = triggerStatus === 'idle'
+      ? '✅ Done — ready for next task'
+      : triggerStatus;
+
     await bot.telegram.sendMessage(
       chatId,
-      `🤖 *AI Task Update*\n\n*${name}* — ${task.status}${prompt}`,
+      `🤖 *AI Task Update*\n\n*${name}* — ${statusLabel}${prompt}`,
       { parse_mode: 'Markdown', ...taskMenuKeyboard(taskId) }
     );
     log.info('task notify sent', { taskId, userId, status: task.status });

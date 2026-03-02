@@ -47,7 +47,7 @@ bot.use(async (ctx, next) => {
   }
   // If allowlist is configured, enforce it
   if (config.allowedUsers.size > 0 && !userStore.isAllowed(userId)) {
-    await ctx.reply('You don\'t have access to this bot. Contact the administrator to be added.');
+    await ctx.reply(`You don't have access to this bot. Ask the administrator to add your ID: \`${userId}\``, { parse_mode: 'Markdown' });
     return;
   }
   return next();
@@ -106,10 +106,12 @@ bot.on('text', async (ctx) => {
       await testClient.validateKey();
       userStore.setApiKey(userId, text.trim());
       log.info('key setup success', { userId });
-      await ctx.reply('✅ API key saved! Welcome.', {
-        parse_mode: 'Markdown',
-        ...mainMenuKeyboard(config.adminUsers.has(userId)),
-      });
+      await ctx.reply(
+        `✅ API key saved! Welcome.\n\n` +
+        `Don't forget to connect your GitHub account to check out repositories:\n` +
+        `${config.coderApiUrl}/settings/external-auth`,
+        { parse_mode: 'Markdown', ...mainMenuKeyboard(config.adminUsers.has(userId)) }
+      );
     } catch {
       log.warn('key setup failed', { userId });
       uiState.setPendingKeySetup(chatId); // re-enter setup state

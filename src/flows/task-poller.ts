@@ -38,8 +38,9 @@ async function poll(bot: Telegraf): Promise<void> {
         log.info('task state change', { taskId, from: lastKnownStatus, to: status, userId });
       }
 
-      if (status === 'stopped' && lastKnownStatus !== 'stopped') {
-        await notifyTaskComplete(taskId, chatId, userId, bot);
+      const terminalStatuses = ['stopped', 'error', 'unknown'];
+      if (terminalStatuses.includes(status) && !terminalStatuses.includes(lastKnownStatus ?? '')) {
+        await notifyTaskComplete(taskId, chatId, userId, bot, status);
       }
 
       taskSessions.updateStatus(taskId, userId, status);

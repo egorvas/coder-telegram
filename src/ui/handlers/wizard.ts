@@ -11,6 +11,7 @@ import {
 import { showWorkspaceList } from './workspace-menu.js';
 import { config } from '../../config.js';
 import { handleCoderError } from '../../utils/coder-error.js';
+import { log } from '../../utils/logger.js';
 
 function randomSuffix(): string {
   return Math.random().toString(36).slice(2, 6);
@@ -69,6 +70,7 @@ async function createFromWizard(ctx: Context, wizard: WizardState, prompt: strin
       const name = `ws-${randomSuffix()}`;
       await ctx.reply(`Creating workspace *${name}* from *${templateName ?? 'template'}*...`, { parse_mode: 'Markdown' });
       const ws = await client.createWorkspace(templateVersionId, presetId ?? null, name);
+      log.info('workspace created', { name: ws.name, template: templateName, userId: ctx.from?.id });
       await ctx.reply(
         `Workspace created!\nName: \`${ws.name}\`\nStatus: ${ws.latest_build.status}`,
         { parse_mode: 'Markdown' }
@@ -82,6 +84,7 @@ async function createFromWizard(ctx: Context, wizard: WizardState, prompt: strin
       await ctx.reply(`Creating task from *${templateName ?? 'template'}*...`, { parse_mode: 'Markdown' });
       const task = await client.createTask(templateVersionId, presetId ?? null, prompt);
       const userId = ctx.from?.id ?? chatId;
+      log.info('task created', { taskId: task.id, template: templateName, preset: presetName, userId });
       taskSessions.register(task.id, chatId, userId);
       await ctx.reply(
         `Task created!\nID: \`${task.id}\`\nStatus: ${task.status}${presetName ? `\nPreset: ${presetName}` : ''}`,

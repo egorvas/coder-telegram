@@ -26,11 +26,11 @@ bot.use((ctx, next) => {
   const userId = ctx.from?.id;
   const chatId = ctx.chat?.id;
   if (ctx.callbackQuery && 'data' in ctx.callbackQuery) {
-    log.debug('tg callback', { action: ctx.callbackQuery.data, userId, chatId });
+    log.info('tg callback', { action: ctx.callbackQuery.data, userId, chatId });
   } else if (ctx.message && 'text' in ctx.message) {
     const text = ctx.message.text;
     if (text.startsWith('/')) {
-      log.debug('tg command', { command: text.split(' ')[0], userId, chatId });
+      log.info('tg command', { command: text.split(' ')[0], userId, chatId });
     } else {
       log.debug('tg text', { userId, chatId });
     }
@@ -100,15 +100,18 @@ bot.on('text', async (ctx) => {
   // Priority 0: key setup flow
   if (uiState.isPendingKeySetup(chatId)) {
     uiState.clearPendingKeySetup(chatId);
+    log.info('key setup attempt', { userId, chatId });
     try {
       const testClient = new CoderClient(config.coderApiUrl, text.trim());
       await testClient.validateKey();
       userStore.setApiKey(userId, text.trim());
+      log.info('key setup success', { userId });
       await ctx.reply('✅ API key saved! Welcome.', {
         parse_mode: 'Markdown',
         ...mainMenuKeyboard(config.adminUsers.has(userId)),
       });
     } catch {
+      log.warn('key setup failed', { userId });
       uiState.setPendingKeySetup(chatId); // re-enter setup state
       await ctx.reply('❌ Invalid key — please check and try again.');
     }
@@ -124,6 +127,7 @@ bot.on('text', async (ctx) => {
       uiState.setPendingAdminAdd(chatId);
       return;
     }
+    log.info('admin add user', { byUserId: userId, newUserId: newId });
     userStore.addUser(newId);
     await ctx.reply(`User ${newId} added.`);
     await showAdminPanel(ctx);
@@ -146,6 +150,7 @@ bot.on('text', async (ctx) => {
       await ctx.reply('You need to configure your API key first. Use /start.');
       return;
     }
+    log.info('task append', { taskId: uiPending.taskId, userId });
     try {
       await client.appendTaskPrompt(uiPending.taskId, text);
       await ctx.reply(

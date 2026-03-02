@@ -141,9 +141,10 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
       const prompt = task.initial_prompt
         ? `\n\n_${task.initial_prompt.slice(0, 200)}${task.initial_prompt.length > 200 ? '…' : ''}_`
         : '';
+      const agentState = taskSessions.getAgentState(taskId, ctx.from?.id ?? 0);
       await ctx.editMessageText(
         `*${name}*\nStatus: ${task.status}${prompt}`,
-        { parse_mode: 'Markdown', ...taskMenuKeyboard(taskId) }
+        { parse_mode: 'Markdown', ...taskMenuKeyboard(taskId, agentState) }
       );
     } catch (err) {
       await handleCoderError(ctx, err, ctx.from?.id ?? 0);
@@ -161,9 +162,10 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
         client.getTask(taskId),
         client.getTaskLogs(taskId),
       ]);
+      const agentState = taskSessions.getAgentState(taskId, ctx.from?.id ?? 0);
       await ctx.reply(
         buildLogMessage(taskId, task.status, logs),
-        { parse_mode: 'Markdown', ...taskMenuKeyboard(taskId) }
+        { parse_mode: 'Markdown', ...taskMenuKeyboard(taskId, agentState) }
       );
     } catch (err) {
       await handleCoderError(ctx, err, ctx.from?.id ?? 0);
@@ -191,7 +193,8 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
   bot.action(/^task:delete:cancel:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
     await ctx.answerCbQuery();
-    await ctx.reply('Deletion cancelled.', taskMenuKeyboard(taskId));
+    const agentState = taskSessions.getAgentState(taskId, ctx.from?.id ?? 0);
+    await ctx.reply('Deletion cancelled.', taskMenuKeyboard(taskId, agentState));
   });
 
   // task:delete:<id> → show confirmation prompt
@@ -227,9 +230,10 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
         await ctx.reply('No logs yet.');
         return;
       }
+      const agentState = taskSessions.getAgentState(taskId, ctx.from?.id ?? 0);
       await ctx.replyWithDocument(
         { source: Buffer.from(logs), filename: `${taskId.slice(0, 8)}-log.txt` },
-        { caption: `Task \`${taskId.slice(0, 8)}\` — ${task.status}`, parse_mode: 'Markdown', ...taskMenuKeyboard(taskId) }
+        { caption: `Task \`${taskId.slice(0, 8)}\` — ${task.status}`, parse_mode: 'Markdown', ...taskMenuKeyboard(taskId, agentState) }
       );
     } catch (err) {
       await handleCoderError(ctx, err, ctx.from?.id ?? 0);
@@ -252,7 +256,8 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
     if (!client) return;
     try {
       await client.appendTaskPrompt(taskId, `/model ${model}`);
-      await ctx.editMessageReplyMarkup(taskMenuKeyboard(taskId).reply_markup);
+      const agentState = taskSessions.getAgentState(taskId, ctx.from?.id ?? 0);
+      await ctx.editMessageReplyMarkup(taskMenuKeyboard(taskId, agentState).reply_markup);
       await ctx.reply(
         `Model set to \`${model}\` for task \`${taskId.slice(0, 8)}\`.`,
         { parse_mode: 'Markdown' }

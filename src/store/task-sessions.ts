@@ -103,6 +103,10 @@ class TaskSessionStore {
     }
   }
 
+  getAgentState(taskId: string, userId: number): string | undefined {
+    return this.users.get(userId)?.sessions.get(taskId)?.lastKnownAgentState;
+  }
+
   getAllSessions(): Array<{ taskId: string; chatId: number; userId: number; lastKnownStatus?: string; lastKnownAgentState?: string }> {
     const result: Array<{ taskId: string; chatId: number; userId: number; lastKnownStatus?: string; lastKnownAgentState?: string }> = [];
     for (const [userId, { sessions }] of this.users) {

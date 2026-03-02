@@ -40,18 +40,24 @@ export function taskListKeyboard(tasks: CoderTask[]) {
 }
 
 // 2.3 Task submenu — actions for a specific task
-export function taskMenuKeyboard(taskId: string) {
+export function taskMenuKeyboard(taskId: string, agentState?: string) {
   type Btn = ReturnType<typeof Markup.button.callback> | ReturnType<typeof Markup.button.url>;
+  const actionRow: Btn[] = agentState === 'working'
+    ? [
+        Markup.button.callback('🧠 Model', `task:model:${taskId}`),
+        Markup.button.callback('🗑 Delete', `task:delete:${taskId}`),
+      ]
+    : [
+        Markup.button.callback('✏️ Append', `task:append:${taskId}`),
+        Markup.button.callback('🧠 Model', `task:model:${taskId}`),
+        Markup.button.callback('🗑 Delete', `task:delete:${taskId}`),
+      ];
   const rows: Btn[][] = [
     [
       Markup.button.callback('📋 Logs', `task:logs:${taskId}`),
       Markup.button.callback('📄 Full Log', `task:fulllog:${taskId}`),
     ],
-    [
-      Markup.button.callback('✏️ Append', `task:append:${taskId}`),
-      Markup.button.callback('🧠 Model', `task:model:${taskId}`),
-      Markup.button.callback('🗑 Delete', `task:delete:${taskId}`),
-    ],
+    actionRow,
   ];
   rows.push([Markup.button.url('🌐 Open in Coder', `${config.coderApiUrl}/tasks/me/${taskId}`)]);
   rows.push([Markup.button.callback('« Tasks', 'dashboard:back')]);

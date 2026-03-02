@@ -1,7 +1,7 @@
 import type { Telegraf, Context } from 'telegraf';
 import { coderClient } from '../../bot.js';
 import { buildLogMessage } from '../../utils/telegram.js';
-import { taskListKeyboard, taskMenuKeyboard } from '../keyboards.js';
+import { taskListKeyboard, taskMenuKeyboard, confirmKeyboard } from '../keyboards.js';
 import { taskSessions } from '../../store/task-sessions.js';
 import { uiState } from '../state.js';
 import type { CoderTask } from '../../coder/types.js';
@@ -95,8 +95,8 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
     }
   });
 
-  // task:delete:<id> → delete and return to list
-  bot.action(/^task:delete:(.+)$/, async (ctx) => {
+  // task:delete:confirm:<id> → confirmed: delete and return to list
+  bot.action(/^task:delete:confirm:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
     await ctx.answerCbQuery();
     try {
@@ -104,6 +104,29 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
       taskSessions.remove(taskId);
       await ctx.reply(`Task \`${taskId.slice(0, 8)}\` deleted.`, { parse_mode: 'Markdown' });
       await showTaskDashboard(ctx);
+    } catch (err) {
+      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+  // task:delete:cancel:<id> → cancelled: show task menu
+  bot.action(/^task:delete:cancel:(.+)$/, async (ctx) => {
+    const taskId = ctx.match[1];
+    await ctx.answerCbQuery();
+    await ctx.reply('Deletion cancelled.', taskMenuKeyboard(taskId));
+  });
+
+  // task:delete:<id> → show confirmation prompt
+  bot.action(/^task:delete:(.+)$/, async (ctx) => {
+    const taskId = ctx.match[1];
+    await ctx.answerCbQuery();
+    try {
+      const task = await coderClient.getTask(taskId);
+      const name = task.display_name || task.name;
+      await ctx.reply(
+        `Delete task *${name}*? This cannot be undone.`,
+        { parse_mode: 'Markdown', ...confirmKeyboard(`task:delete:confirm:${taskId}`, `task:delete:cancel:${taskId}`) }
+      );
     } catch (err) {
       await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
     }

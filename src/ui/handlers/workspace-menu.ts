@@ -1,6 +1,6 @@
 import type { Telegraf, Context } from 'telegraf';
 import { coderClient } from '../../bot.js';
-import { workspaceListKeyboard, workspaceActionKeyboard } from '../keyboards.js';
+import { workspaceListKeyboard, workspaceActionKeyboard, confirmKeyboard } from '../keyboards.js';
 import { startWizard } from './wizard.js';
 
 export async function showWorkspaceList(ctx: Context): Promise<void> {
@@ -62,8 +62,8 @@ export function registerWorkspaceMenuHandlers(bot: Telegraf): void {
     }
   });
 
-  // ws:stop:<name> → stop workspace, show updated action menu
-  bot.action(/^ws:stop:(.+)$/, async (ctx) => {
+  // ws:stop:confirm:<name> → confirmed: stop workspace
+  bot.action(/^ws:stop:confirm:(.+)$/, async (ctx) => {
     const name = ctx.match[1];
     await ctx.answerCbQuery('Stopping...');
     try {
@@ -73,6 +73,33 @@ export function registerWorkspaceMenuHandlers(bot: Telegraf): void {
     } catch (err) {
       await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
     }
+  });
+
+  // ws:stop:cancel:<name> → cancelled: show workspace action menu
+  bot.action(/^ws:stop:cancel:(.+)$/, async (ctx) => {
+    const name = ctx.match[1];
+    await ctx.answerCbQuery();
+    try {
+      const workspaces = await coderClient.listWorkspaces();
+      const ws = workspaces.find((w) => w.name === name);
+      if (ws) {
+        await ctx.reply(`Workspace *${name}*`, { parse_mode: 'Markdown', ...workspaceActionKeyboard(ws) });
+      } else {
+        await showWorkspaceList(ctx);
+      }
+    } catch (err) {
+      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+  // ws:stop:<name> → show confirmation prompt
+  bot.action(/^ws:stop:(.+)$/, async (ctx) => {
+    const name = ctx.match[1];
+    await ctx.answerCbQuery();
+    await ctx.reply(
+      `Stop workspace *${name}*?`,
+      { parse_mode: 'Markdown', ...confirmKeyboard(`ws:stop:confirm:${name}`, `ws:stop:cancel:${name}`) }
+    );
   });
 
   // ws:refresh → reload workspace list

@@ -131,7 +131,17 @@ export function wizardPresetKeyboard(presets: CoderPreset[]) {
   return Markup.inlineKeyboard(rows);
 }
 
-// 2.10 Wizard: prompt input (task = required, workspace = optional)
+// 2.10 Confirm keyboard (yes/no for destructive actions)
+export function confirmKeyboard(yesAction: string, noAction: string) {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback('✅ Yes', yesAction),
+      Markup.button.callback('❌ No', noAction),
+    ],
+  ]);
+}
+
+// 2.11 Wizard: prompt input (task = required, workspace = optional)
 export function promptKeyboard(canSkip: boolean) {
   const buttons = canSkip
     ? [Markup.button.callback('⏭ Skip', 'wizard:skip'), Markup.button.callback('✕ Cancel', 'wizard:cancel')]

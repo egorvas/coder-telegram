@@ -70,7 +70,7 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
         : '';
       await ctx.editMessageText(
         `*${name}*\nStatus: ${task.status}${prompt}`,
-        { parse_mode: 'Markdown', ...taskMenuKeyboard(taskId) }
+        { parse_mode: 'Markdown', ...taskMenuKeyboard(taskId, task.status) }
       );
     } catch (err) {
       await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
@@ -173,6 +173,46 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
       await ctx.reply(
         `Model set to \`${model}\` for task \`${taskId.slice(0, 8)}\`.`,
         { parse_mode: 'Markdown' }
+      );
+    } catch (err) {
+      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+  // task:pause:<id> → pause task, re-fetch, update message
+  bot.action(/^task:pause:(.+)$/, async (ctx) => {
+    const taskId = ctx.match[1];
+    await ctx.answerCbQuery('Pausing...');
+    try {
+      await coderClient.pauseTask(taskId);
+      const task = await coderClient.getTask(taskId);
+      const name = task.display_name || task.name;
+      const prompt = task.initial_prompt
+        ? `\n\n_${task.initial_prompt.slice(0, 200)}${task.initial_prompt.length > 200 ? '…' : ''}_`
+        : '';
+      await ctx.editMessageText(
+        `*${name}*\nStatus: ${task.status}${prompt}`,
+        { parse_mode: 'Markdown', ...taskMenuKeyboard(taskId, task.status) }
+      );
+    } catch (err) {
+      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+  // task:resume:<id> → resume task, re-fetch, update message
+  bot.action(/^task:resume:(.+)$/, async (ctx) => {
+    const taskId = ctx.match[1];
+    await ctx.answerCbQuery('Resuming...');
+    try {
+      await coderClient.resumeTask(taskId);
+      const task = await coderClient.getTask(taskId);
+      const name = task.display_name || task.name;
+      const prompt = task.initial_prompt
+        ? `\n\n_${task.initial_prompt.slice(0, 200)}${task.initial_prompt.length > 200 ? '…' : ''}_`
+        : '';
+      await ctx.editMessageText(
+        `*${name}*\nStatus: ${task.status}${prompt}`,
+        { parse_mode: 'Markdown', ...taskMenuKeyboard(taskId, task.status) }
       );
     } catch (err) {
       await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);

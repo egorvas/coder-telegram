@@ -124,4 +124,12 @@ export class CoderClient {
   async deleteTask(taskId: string): Promise<void> {
     await this.request(`/api/v2/tasks/me/${taskId}`, { method: 'DELETE' });
   }
+
+  async pauseTask(taskId: string): Promise<void> {
+    await this.request(`/api/v2/tasks/me/${taskId}/pause`, { method: 'POST' });
+  }
+
+  async resumeTask(taskId: string): Promise<void> {
+    await this.request(`/api/v2/tasks/me/${taskId}/resume`, { method: 'POST' });
+  }
 }

@@ -10,6 +10,7 @@ import {
 } from '../keyboards.js';
 import { showWorkspaceList } from './workspace-menu.js';
 import { config } from '../../config.js';
+import { handleCoderError } from '../../utils/coder-error.js';
 
 function randomSuffix(): string {
   return Math.random().toString(36).slice(2, 6);
@@ -45,7 +46,7 @@ export async function startWizard(ctx: Context, mode: 'task' | 'workspace' = 'ta
       ...wizardTemplateKeyboard(templates),
     });
   } catch (err) {
-    await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    await handleCoderError(ctx, err, ctx.from?.id ?? 0);
   }
 }
 
@@ -74,7 +75,7 @@ async function createFromWizard(ctx: Context, wizard: WizardState, prompt: strin
       );
       await showWorkspaceList(ctx);
     } catch (err) {
-      await ctx.reply(`Failed to create workspace: ${err instanceof Error ? err.message : String(err)}`);
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   } else {
     try {
@@ -87,7 +88,7 @@ async function createFromWizard(ctx: Context, wizard: WizardState, prompt: strin
         { parse_mode: 'Markdown' }
       );
     } catch (err) {
-      await ctx.reply(`Failed to create task: ${err instanceof Error ? err.message : String(err)}`);
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   }
 }
@@ -143,7 +144,7 @@ export function registerWizardHandlers(bot: Telegraf): void {
         );
       }
     } catch (err) {
-      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 
@@ -235,7 +236,7 @@ export function registerWizardHandlers(bot: Telegraf): void {
         }
       }
     } catch (err) {
-      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 }

@@ -2,6 +2,7 @@ import type { Context } from 'telegraf';
 import { getCoderClient } from '../../bot.js';
 import { taskSessions } from '../../store/task-sessions.js';
 import { startWizard } from '../../ui/handlers/wizard.js';
+import { handleCoderError } from '../../utils/coder-error.js';
 
 export async function taskCreateCommand(ctx: Context): Promise<void> {
   const text = ctx.message && 'text' in ctx.message ? ctx.message.text : '';
@@ -50,6 +51,6 @@ export async function taskCreateCommand(ctx: Context): Promise<void> {
       { parse_mode: 'Markdown' }
     );
   } catch (err) {
-    await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    await handleCoderError(ctx, err, userId);
   }
 }

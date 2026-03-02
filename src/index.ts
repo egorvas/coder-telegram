@@ -19,6 +19,7 @@ import { registerTemplateBrowserHandlers } from './ui/handlers/template-browser.
 import { registerAdminPanelHandlers, showAdminPanel } from './ui/handlers/admin-panel.js';
 import { CoderClient } from './coder/client.js';
 import { log } from './utils/logger.js';
+import { handleCoderError } from './utils/coder-error.js';
 
 // ─── Middleware: update logger ────────────────────────────────────────────────
 bot.use((ctx, next) => {
@@ -152,7 +153,7 @@ bot.on('text', async (ctx) => {
         { parse_mode: 'Markdown', ...taskMenuKeyboard(uiPending.taskId) }
       );
     } catch (err) {
-      await ctx.reply(`Failed to append: ${err instanceof Error ? err.message : String(err)}`);
+      await handleCoderError(ctx, err, userId);
     }
     return;
   }

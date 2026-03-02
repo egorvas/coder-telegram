@@ -1,6 +1,13 @@
 import type { Workspace, WorkspaceListResponse, WorkspaceBuild, CoderTemplate, CoderPreset, CoderTask } from './types.js';
 import { log } from '../utils/logger.js';
 
+export class CoderAuthError extends Error {
+  constructor() {
+    super('API key expired or invalid');
+    this.name = 'CoderAuthError';
+  }
+}
+
 // Escape all non-ASCII chars as \uXXXX so the HTTP body is pure ASCII.
 // Workaround for Coder server dropping leading UTF-8 bytes (e.g. Cyrillic Б = \xD0\x91 → 0x91).
 function toAsciiJson(data: unknown): string {
@@ -36,6 +43,9 @@ export class CoderClient {
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       log.error('coder api error', { method, path, status: res.status, durationMs });
+      if (res.status === 401 || res.status === 403) {
+        throw new CoderAuthError();
+      }
       throw new Error(`Coder API error ${res.status}: ${text}`);
     }
 

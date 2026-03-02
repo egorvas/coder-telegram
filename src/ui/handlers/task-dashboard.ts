@@ -9,6 +9,7 @@ import { userStore } from '../../store/user-store.js';
 import type { CoderTask } from '../../coder/types.js';
 import { startWizard } from './wizard.js';
 import { log } from '../../utils/logger.js';
+import { handleCoderError, CoderAuthError } from '../../utils/coder-error.js';
 
 interface TaskWithWorkspace {
   task: CoderTask;
@@ -57,7 +58,12 @@ export async function showTaskDashboard(ctx: Context): Promise<void> {
             allItems.push({ task, ownerId: r.value.ownerId });
           }
         } else {
-          log.warn('failed to fetch tasks', { userId: usersWithKeys[i].userId, err: String(r.reason) });
+          if (r.reason instanceof CoderAuthError) {
+            log.warn('coder auth expired, clearing key', { userId: usersWithKeys[i].userId });
+            userStore.clearApiKey(usersWithKeys[i].userId);
+          } else {
+            log.warn('failed to fetch tasks', { userId: usersWithKeys[i].userId, err: String(r.reason) });
+          }
         }
       }
 
@@ -100,7 +106,7 @@ export async function showTaskDashboard(ctx: Context): Promise<void> {
       await ctx.reply(text, { parse_mode: 'Markdown', ...keyboard });
     }
   } catch (err) {
-    await ctx.reply(`Error loading tasks: ${err instanceof Error ? err.message : String(err)}`);
+    await handleCoderError(ctx, err, ctx.from?.id ?? 0);
   }
 }
 
@@ -140,7 +146,7 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
         { parse_mode: 'Markdown', ...taskMenuKeyboard(taskId) }
       );
     } catch (err) {
-      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 
@@ -160,7 +166,7 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
         { parse_mode: 'Markdown', ...taskMenuKeyboard(taskId) }
       );
     } catch (err) {
-      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 
@@ -177,7 +183,7 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
       await ctx.reply(`Task \`${taskId.slice(0, 8)}\` deleted.`, { parse_mode: 'Markdown' });
       await showTaskDashboard(ctx);
     } catch (err) {
-      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 
@@ -202,7 +208,7 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
         { parse_mode: 'Markdown', ...confirmKeyboard(`task:delete:confirm:${taskId}`, `task:delete:cancel:${taskId}`) }
       );
     } catch (err) {
-      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 
@@ -226,7 +232,7 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
         { caption: `Task \`${taskId.slice(0, 8)}\` — ${task.status}`, parse_mode: 'Markdown', ...taskMenuKeyboard(taskId) }
       );
     } catch (err) {
-      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 
@@ -252,7 +258,7 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
         { parse_mode: 'Markdown' }
       );
     } catch (err) {
-      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 

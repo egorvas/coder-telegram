@@ -6,6 +6,7 @@ import { startWizard } from './wizard.js';
 import { uiState } from '../state.js';
 import { userStore } from '../../store/user-store.js';
 import { log } from '../../utils/logger.js';
+import { handleCoderError, CoderAuthError } from '../../utils/coder-error.js';
 
 function clientOrReply(ctx: Context): ReturnType<typeof getCoderClient> {
   const userId = ctx.from?.id;
@@ -41,7 +42,12 @@ export async function showWorkspaceList(ctx: Context): Promise<void> {
             total++;
           }
         } else {
-          log.warn('failed to fetch workspaces', { userId: usersWithKeys[i].userId, err: String(r.reason) });
+          if (r.reason instanceof CoderAuthError) {
+            log.warn('coder auth expired, clearing key', { userId: usersWithKeys[i].userId });
+            userStore.clearApiKey(usersWithKeys[i].userId);
+          } else {
+            log.warn('failed to fetch workspaces', { userId: usersWithKeys[i].userId, err: String(r.reason) });
+          }
         }
       }
 
@@ -60,7 +66,7 @@ export async function showWorkspaceList(ctx: Context): Promise<void> {
         await ctx.reply(text, { parse_mode: 'Markdown', ...keyboard });
       }
     } catch (err) {
-      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
     return;
   }
@@ -110,7 +116,7 @@ export function registerWorkspaceMenuHandlers(bot: Telegraf): void {
         { parse_mode: 'Markdown', ...workspaceActionKeyboard(ws) }
       );
     } catch (err) {
-      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 
@@ -125,7 +131,7 @@ export function registerWorkspaceMenuHandlers(bot: Telegraf): void {
       await ctx.reply(`Workspace *${name}* start initiated.`, { parse_mode: 'Markdown' });
       await showWorkspaceList(ctx);
     } catch (err) {
-      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 
@@ -140,7 +146,7 @@ export function registerWorkspaceMenuHandlers(bot: Telegraf): void {
       await ctx.reply(`Workspace *${name}* stop initiated.`, { parse_mode: 'Markdown' });
       await showWorkspaceList(ctx);
     } catch (err) {
-      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 
@@ -159,7 +165,7 @@ export function registerWorkspaceMenuHandlers(bot: Telegraf): void {
         await showWorkspaceList(ctx);
       }
     } catch (err) {
-      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 
@@ -184,7 +190,7 @@ export function registerWorkspaceMenuHandlers(bot: Telegraf): void {
       await ctx.reply(`Workspace *${name}* deletion initiated.`, { parse_mode: 'Markdown' });
       await showWorkspaceList(ctx);
     } catch (err) {
-      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 
@@ -203,7 +209,7 @@ export function registerWorkspaceMenuHandlers(bot: Telegraf): void {
         await showWorkspaceList(ctx);
       }
     } catch (err) {
-      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 

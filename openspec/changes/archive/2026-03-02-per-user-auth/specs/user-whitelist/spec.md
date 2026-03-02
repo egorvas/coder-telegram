@@ -1,4 +1,4 @@
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Unauthorised users are rejected
 
@@ -13,6 +13,8 @@ The system SHALL reject all interactions from Telegram users who are not in the 
 
 - **WHEN** a Telegram user whose ID is in the allowlist sends a command
 - **THEN** the bot SHALL process the request normally
+
+## MODIFIED Requirements
 
 ### Requirement: Whitelist is configured via environment variable and runtime admin actions
 

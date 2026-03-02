@@ -3,11 +3,16 @@ import { mainMenuKeyboard } from '../keyboards.js';
 import { showTaskDashboard } from './task-dashboard.js';
 import { showWorkspaceList } from './workspace-menu.js';
 import { showTemplateList } from './template-browser.js';
+import { config } from '../../config.js';
 
 const MENU_TEXT = `*Coder Bot* — choose a section:`;
 
-export async function showMainMenu(ctx: Context & { editMessage?: boolean }): Promise<void> {
-  const keyboard = mainMenuKeyboard();
+export function isAdmin(ctx: Context): boolean {
+  return config.adminUsers.has(ctx.from?.id ?? 0);
+}
+
+export async function showMainMenu(ctx: Context): Promise<void> {
+  const keyboard = mainMenuKeyboard(isAdmin(ctx));
   try {
     await ctx.editMessageText(MENU_TEXT, { parse_mode: 'Markdown', ...keyboard });
   } catch {

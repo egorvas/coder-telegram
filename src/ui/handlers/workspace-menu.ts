@@ -1,11 +1,73 @@
 import type { Telegraf, Context } from 'telegraf';
-import { coderClient } from '../../bot.js';
+import { Markup } from 'telegraf';
+import { getCoderClient } from '../../bot.js';
 import { workspaceListKeyboard, workspaceActionKeyboard, confirmKeyboard } from '../keyboards.js';
 import { startWizard } from './wizard.js';
+import { uiState } from '../state.js';
+import { userStore } from '../../store/user-store.js';
+
+function clientOrReply(ctx: Context): ReturnType<typeof getCoderClient> {
+  const userId = ctx.from?.id;
+  if (!userId) return null;
+  const client = getCoderClient(userId);
+  if (!client) {
+    void ctx.reply('You need to configure your API key first. Use /start.');
+  }
+  return client;
+}
 
 export async function showWorkspaceList(ctx: Context): Promise<void> {
+  const userId = ctx.from?.id ?? 0;
+
+  if (uiState.isGlobalView(userId)) {
+    try {
+      const usersWithKeys = userStore.listUsers().filter((u) => u.hasKey);
+      const results = await Promise.allSettled(
+        usersWithKeys.map(async (u) => {
+          const c = getCoderClient(u.userId);
+          if (!c) return [];
+          return c.listWorkspaces();
+        })
+      );
+
+      const lines: string[] = [];
+      let total = 0;
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i];
+        if (r.status === 'fulfilled') {
+          for (const ws of r.value) {
+            lines.push(`• \`[${ws.owner_name}]\` ${ws.name} — ${ws.latest_build.status}`);
+            total++;
+          }
+        } else {
+          console.warn(`Failed to fetch workspaces for user ${usersWithKeys[i].userId}:`, r.reason);
+        }
+      }
+
+      const text = total === 0
+        ? '_No workspaces found across all users._'
+        : `*Workspaces — All Users* (${total}):\n\n${lines.join('\n')}`;
+
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('🔄 Refresh', 'ws:refresh')],
+        [Markup.button.callback('« Main Menu', 'menu:main')],
+      ]);
+
+      try {
+        await ctx.editMessageText(text, { parse_mode: 'Markdown', ...keyboard });
+      } catch {
+        await ctx.reply(text, { parse_mode: 'Markdown', ...keyboard });
+      }
+    } catch (err) {
+      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return;
+  }
+
+  const client = clientOrReply(ctx);
+  if (!client) return;
   try {
-    const workspaces = await coderClient.listWorkspaces();
+    const workspaces = await client.listWorkspaces();
     const keyboard = workspaceListKeyboard(workspaces);
 
     if (workspaces.length === 0) {
@@ -33,8 +95,10 @@ export function registerWorkspaceMenuHandlers(bot: Telegraf): void {
   bot.action(/^ws:select:(.+)$/, async (ctx) => {
     const name = ctx.match[1];
     await ctx.answerCbQuery();
+    const client = clientOrReply(ctx);
+    if (!client) return;
     try {
-      const workspaces = await coderClient.listWorkspaces();
+      const workspaces = await client.listWorkspaces();
       const ws = workspaces.find((w) => w.name === name);
       if (!ws) {
         await ctx.reply(`Workspace not found: ${name}`);
@@ -49,12 +113,14 @@ export function registerWorkspaceMenuHandlers(bot: Telegraf): void {
     }
   });
 
-  // ws:start:<name> → start workspace, show updated action menu
+  // ws:start:<name> → start workspace
   bot.action(/^ws:start:(.+)$/, async (ctx) => {
     const name = ctx.match[1];
     await ctx.answerCbQuery('Starting...');
+    const client = clientOrReply(ctx);
+    if (!client) return;
     try {
-      await coderClient.startWorkspace(name);
+      await client.startWorkspace(name);
       await ctx.reply(`Workspace *${name}* start initiated.`, { parse_mode: 'Markdown' });
       await showWorkspaceList(ctx);
     } catch (err) {
@@ -66,8 +132,10 @@ export function registerWorkspaceMenuHandlers(bot: Telegraf): void {
   bot.action(/^ws:stop:confirm:(.+)$/, async (ctx) => {
     const name = ctx.match[1];
     await ctx.answerCbQuery('Stopping...');
+    const client = clientOrReply(ctx);
+    if (!client) return;
     try {
-      await coderClient.stopWorkspace(name);
+      await client.stopWorkspace(name);
       await ctx.reply(`Workspace *${name}* stop initiated.`, { parse_mode: 'Markdown' });
       await showWorkspaceList(ctx);
     } catch (err) {
@@ -79,8 +147,10 @@ export function registerWorkspaceMenuHandlers(bot: Telegraf): void {
   bot.action(/^ws:stop:cancel:(.+)$/, async (ctx) => {
     const name = ctx.match[1];
     await ctx.answerCbQuery();
+    const client = clientOrReply(ctx);
+    if (!client) return;
     try {
-      const workspaces = await coderClient.listWorkspaces();
+      const workspaces = await client.listWorkspaces();
       const ws = workspaces.find((w) => w.name === name);
       if (ws) {
         await ctx.reply(`Workspace *${name}*`, { parse_mode: 'Markdown', ...workspaceActionKeyboard(ws) });
@@ -106,8 +176,10 @@ export function registerWorkspaceMenuHandlers(bot: Telegraf): void {
   bot.action(/^ws:delete:confirm:(.+)$/, async (ctx) => {
     const name = ctx.match[1];
     await ctx.answerCbQuery('Deleting...');
+    const client = clientOrReply(ctx);
+    if (!client) return;
     try {
-      await coderClient.deleteWorkspace(name);
+      await client.deleteWorkspace(name);
       await ctx.reply(`Workspace *${name}* deletion initiated.`, { parse_mode: 'Markdown' });
       await showWorkspaceList(ctx);
     } catch (err) {
@@ -119,8 +191,10 @@ export function registerWorkspaceMenuHandlers(bot: Telegraf): void {
   bot.action(/^ws:delete:cancel:(.+)$/, async (ctx) => {
     const name = ctx.match[1];
     await ctx.answerCbQuery();
+    const client = clientOrReply(ctx);
+    if (!client) return;
     try {
-      const workspaces = await coderClient.listWorkspaces();
+      const workspaces = await client.listWorkspaces();
       const ws = workspaces.find((w) => w.name === name);
       if (ws) {
         await ctx.reply(`Workspace *${name}*`, { parse_mode: 'Markdown', ...workspaceActionKeyboard(ws) });

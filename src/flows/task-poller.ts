@@ -1,5 +1,5 @@
 import type { Telegraf } from 'telegraf';
-import { coderClient } from '../bot.js';
+import { getCoderClient } from '../bot.js';
 import { taskSessions } from '../store/task-sessions.js';
 import { notifyTaskComplete } from './task-completion.js';
 
@@ -14,12 +14,15 @@ export function startPoller(bot: Telegraf, intervalMs = 15_000): void {
 async function poll(bot: Telegraf): Promise<void> {
   const sessions = taskSessions.getAllSessions();
   for (const { taskId, chatId, userId, lastKnownStatus } of sessions) {
+    const client = getCoderClient(userId);
+    if (!client) continue; // user has no key configured
+
     try {
-      const task = await coderClient.getTask(taskId);
+      const task = await client.getTask(taskId);
       const status = task.status;
 
       if (status === 'stopped' && lastKnownStatus !== 'stopped') {
-        await notifyTaskComplete(taskId, chatId, bot);
+        await notifyTaskComplete(taskId, chatId, userId, bot);
       }
 
       taskSessions.updateStatus(taskId, userId, status);

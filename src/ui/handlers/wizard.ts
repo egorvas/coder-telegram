@@ -1,5 +1,5 @@
 import type { Telegraf, Context } from 'telegraf';
-import { coderClient } from '../../bot.js';
+import { getCoderClient } from '../../bot.js';
 import { uiState, type WizardState } from '../state.js';
 import { taskSessions } from '../../store/task-sessions.js';
 import {
@@ -9,19 +9,33 @@ import {
   mainMenuKeyboard,
 } from '../keyboards.js';
 import { showWorkspaceList } from './workspace-menu.js';
+import { config } from '../../config.js';
 
 function randomSuffix(): string {
   return Math.random().toString(36).slice(2, 6);
 }
 
+function clientOrReply(ctx: Context): ReturnType<typeof getCoderClient> {
+  const userId = ctx.from?.id;
+  if (!userId) return null;
+  const client = getCoderClient(userId);
+  if (!client) {
+    void ctx.reply('You need to configure your API key first. Use /start.');
+  }
+  return client;
+}
+
 export async function startWizard(ctx: Context, mode: 'task' | 'workspace' = 'task'): Promise<void> {
   const chatId = ctx.chat?.id;
   if (!chatId) return;
+  const client = clientOrReply(ctx);
+  if (!client) return;
 
   try {
-    const templates = await coderClient.listTemplates();
+    const templates = await client.listTemplates();
     if (templates.length === 0) {
-      await ctx.reply('No templates available.', mainMenuKeyboard());
+      const userId = ctx.from?.id ?? 0;
+      await ctx.reply('No templates available.', mainMenuKeyboard(config.adminUsers.has(userId)));
       return;
     }
     uiState.setWizard(chatId, { step: 1, mode });
@@ -38,6 +52,8 @@ export async function startWizard(ctx: Context, mode: 'task' | 'workspace' = 'ta
 async function createFromWizard(ctx: Context, wizard: WizardState, prompt: string): Promise<void> {
   const chatId = ctx.chat?.id;
   if (!chatId) return;
+  const client = clientOrReply(ctx);
+  if (!client) return;
 
   uiState.clearWizard(chatId);
 
@@ -51,7 +67,7 @@ async function createFromWizard(ctx: Context, wizard: WizardState, prompt: strin
     try {
       const name = `ws-${randomSuffix()}`;
       await ctx.reply(`Creating workspace *${name}* from *${templateName ?? 'template'}*...`, { parse_mode: 'Markdown' });
-      const ws = await coderClient.createWorkspace(templateVersionId, presetId ?? null, name);
+      const ws = await client.createWorkspace(templateVersionId, presetId ?? null, name);
       await ctx.reply(
         `Workspace created!\nName: \`${ws.name}\`\nStatus: ${ws.latest_build.status}`,
         { parse_mode: 'Markdown' }
@@ -63,7 +79,7 @@ async function createFromWizard(ctx: Context, wizard: WizardState, prompt: strin
   } else {
     try {
       await ctx.reply(`Creating task from *${templateName ?? 'template'}*...`, { parse_mode: 'Markdown' });
-      const task = await coderClient.createTask(templateVersionId, presetId ?? null, prompt);
+      const task = await client.createTask(templateVersionId, presetId ?? null, prompt);
       const userId = ctx.from?.id ?? chatId;
       taskSessions.register(task.id, chatId, userId);
       await ctx.reply(
@@ -91,19 +107,21 @@ export function registerWizardHandlers(bot: Telegraf): void {
     const chatId = ctx.chat?.id;
     if (!chatId) return;
     await ctx.answerCbQuery();
+    const client = clientOrReply(ctx);
+    if (!client) return;
 
     const wizard = uiState.getWizard(chatId);
     const mode = wizard?.mode ?? 'task';
 
     try {
-      const templates = await coderClient.listTemplates();
+      const templates = await client.listTemplates();
       const tpl = templates.find((t) => t.name === templateName);
       if (!tpl) {
         await ctx.reply(`Template "${templateName}" not found.`);
         return;
       }
 
-      const presets = await coderClient.getTemplatePresets(tpl.active_version_id);
+      const presets = await client.getTemplatePresets(tpl.active_version_id);
       uiState.setWizard(chatId, {
         step: presets.length > 0 ? 2 : 3,
         mode,
@@ -135,6 +153,8 @@ export function registerWizardHandlers(bot: Telegraf): void {
     const chatId = ctx.chat?.id;
     if (!chatId) return;
     await ctx.answerCbQuery();
+    const client = clientOrReply(ctx);
+    if (!client) return;
 
     const wizard = uiState.getWizard(chatId);
     if (!wizard) return;
@@ -142,7 +162,7 @@ export function registerWizardHandlers(bot: Telegraf): void {
     let presetName = presetId;
     try {
       if (wizard.templateVersionId) {
-        const presets = await coderClient.getTemplatePresets(wizard.templateVersionId);
+        const presets = await client.getTemplatePresets(wizard.templateVersionId);
         const preset = presets.find((p) => p.ID === presetId);
         if (preset) presetName = preset.Name;
       }
@@ -174,7 +194,8 @@ export function registerWizardHandlers(bot: Telegraf): void {
     if (!chatId) return;
     await ctx.answerCbQuery();
     uiState.clearWizard(chatId);
-    await ctx.reply('Wizard cancelled.', mainMenuKeyboard());
+    const userId = ctx.from?.id ?? 0;
+    await ctx.reply('Wizard cancelled.', mainMenuKeyboard(config.adminUsers.has(userId)));
   });
 
   // wizard:back → go back one step
@@ -182,20 +203,22 @@ export function registerWizardHandlers(bot: Telegraf): void {
     const chatId = ctx.chat?.id;
     if (!chatId) return;
     await ctx.answerCbQuery();
+    const client = clientOrReply(ctx);
+    if (!client) return;
 
     const wizard = uiState.getWizard(chatId);
     if (!wizard) return;
 
     try {
       if (wizard.step === 2) {
-        const templates = await coderClient.listTemplates();
+        const templates = await client.listTemplates();
         uiState.setWizard(chatId, { step: 1, mode: wizard.mode });
         await ctx.reply('*Step 1/3* — Select a template:', {
           parse_mode: 'Markdown',
           ...wizardTemplateKeyboard(templates),
         });
       } else if (wizard.step === 3 && wizard.templateVersionId) {
-        const presets = await coderClient.getTemplatePresets(wizard.templateVersionId);
+        const presets = await client.getTemplatePresets(wizard.templateVersionId);
         if (presets.length > 0) {
           uiState.setWizard(chatId, { ...wizard, step: 2, presetId: undefined, presetName: undefined });
           await ctx.reply('*Step 2/3* — Select a preset:', {
@@ -203,7 +226,7 @@ export function registerWizardHandlers(bot: Telegraf): void {
             ...wizardPresetKeyboard(presets),
           });
         } else {
-          const templates = await coderClient.listTemplates();
+          const templates = await client.listTemplates();
           uiState.setWizard(chatId, { step: 1, mode: wizard.mode });
           await ctx.reply('*Step 1/3* — Select a template:', {
             parse_mode: 'Markdown',

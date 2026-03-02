@@ -1,9 +1,11 @@
 import type { Telegraf, Context } from 'telegraf';
-import { coderClient } from '../../bot.js';
+import { Markup } from 'telegraf';
+import { getCoderClient } from '../../bot.js';
 import { buildLogMessage } from '../../utils/telegram.js';
 import { taskListKeyboard, taskMenuKeyboard, modelKeyboard, confirmKeyboard } from '../keyboards.js';
 import { taskSessions } from '../../store/task-sessions.js';
 import { uiState } from '../state.js';
+import { userStore } from '../../store/user-store.js';
 import type { CoderTask } from '../../coder/types.js';
 import { startWizard } from './wizard.js';
 
@@ -12,16 +14,78 @@ interface TaskWithWorkspace {
   workspaceName: string;
 }
 
-async function fetchAllTasks(): Promise<TaskWithWorkspace[]> {
-  const tasks = await coderClient.listTasks();
+function clientOrReply(ctx: Context): ReturnType<typeof getCoderClient> {
+  const userId = ctx.from?.id;
+  if (!userId) return null;
+  const client = getCoderClient(userId);
+  if (!client) {
+    void ctx.reply('You need to configure your API key first. Use /start.');
+  }
+  return client;
+}
+
+async function fetchAllTasks(ctx: Context): Promise<TaskWithWorkspace[] | null> {
+  const client = clientOrReply(ctx);
+  if (!client) return null;
+  const tasks = await client.listTasks();
   return tasks
     .slice(0, 10)
     .map((task) => ({ task, workspaceName: task.workspace_name }));
 }
 
 export async function showTaskDashboard(ctx: Context): Promise<void> {
+  const userId = ctx.from?.id ?? 0;
+
+  if (uiState.isGlobalView(userId)) {
+    try {
+      const usersWithKeys = userStore.listUsers().filter((u) => u.hasKey);
+      const results = await Promise.allSettled(
+        usersWithKeys.map(async (u) => {
+          const c = getCoderClient(u.userId);
+          if (!c) return { ownerId: u.userId, tasks: [] as CoderTask[] };
+          const tasks = await c.listTasks();
+          return { ownerId: u.userId, tasks };
+        })
+      );
+
+      const allItems: Array<{ task: CoderTask; ownerId: number }> = [];
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i];
+        if (r.status === 'fulfilled') {
+          for (const task of r.value.tasks) {
+            allItems.push({ task, ownerId: r.value.ownerId });
+          }
+        } else {
+          console.warn(`Failed to fetch tasks for user ${usersWithKeys[i].userId}:`, r.reason);
+        }
+      }
+
+      const lines = allItems.slice(0, 20).map(
+        ({ task, ownerId }) => `• \`[${ownerId}]\` ${task.display_name || task.name} — ${task.status}`
+      );
+      const text = allItems.length === 0
+        ? '_No tasks found across all users._'
+        : `*AI Tasks — All Users* (${allItems.length}):\n\n${lines.join('\n')}`;
+
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('🔄 Refresh', 'dashboard:refresh')],
+        [Markup.button.callback('« Main Menu', 'menu:main')],
+      ]);
+
+      try {
+        await ctx.editMessageText(text, { parse_mode: 'Markdown', ...keyboard });
+      } catch {
+        await ctx.reply(text, { parse_mode: 'Markdown', ...keyboard });
+      }
+    } catch (err) {
+      await ctx.reply(`Error loading tasks: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return;
+  }
+
   try {
-    const items = await fetchAllTasks();
+    const items = await fetchAllTasks(ctx);
+    if (items === null) return;
     const tasks = items.map((i) => i.task);
     const keyboard = taskListKeyboard(tasks);
 
@@ -62,8 +126,10 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
   bot.action(/^task:select:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
     await ctx.answerCbQuery();
+    const client = clientOrReply(ctx);
+    if (!client) return;
     try {
-      const task = await coderClient.getTask(taskId);
+      const task = await client.getTask(taskId);
       const name = task.display_name || task.name;
       const prompt = task.initial_prompt
         ? `\n\n_${task.initial_prompt.slice(0, 200)}${task.initial_prompt.length > 200 ? '…' : ''}_`
@@ -81,10 +147,12 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
   bot.action(/^task:logs:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
     await ctx.answerCbQuery();
+    const client = clientOrReply(ctx);
+    if (!client) return;
     try {
       const [task, logs] = await Promise.all([
-        coderClient.getTask(taskId),
-        coderClient.getTaskLogs(taskId),
+        client.getTask(taskId),
+        client.getTaskLogs(taskId),
       ]);
       await ctx.reply(
         buildLogMessage(taskId, task.status, logs),
@@ -100,8 +168,10 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
     const taskId = ctx.match[1];
     const userId = ctx.from?.id ?? ctx.chat?.id ?? 0;
     await ctx.answerCbQuery();
+    const client = clientOrReply(ctx);
+    if (!client) return;
     try {
-      await coderClient.deleteTask(taskId);
+      await client.deleteTask(taskId);
       taskSessions.remove(taskId, userId);
       await ctx.reply(`Task \`${taskId.slice(0, 8)}\` deleted.`, { parse_mode: 'Markdown' });
       await showTaskDashboard(ctx);
@@ -121,8 +191,10 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
   bot.action(/^task:delete:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
     await ctx.answerCbQuery();
+    const client = clientOrReply(ctx);
+    if (!client) return;
     try {
-      const task = await coderClient.getTask(taskId);
+      const task = await client.getTask(taskId);
       const name = task.display_name || task.name;
       await ctx.reply(
         `Delete task *${name}*? This cannot be undone.`,
@@ -137,10 +209,12 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
   bot.action(/^task:fulllog:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
     await ctx.answerCbQuery();
+    const client = clientOrReply(ctx);
+    if (!client) return;
     try {
       const [task, logs] = await Promise.all([
-        coderClient.getTask(taskId),
-        coderClient.getTaskLogs(taskId),
+        client.getTask(taskId),
+        client.getTaskLogs(taskId),
       ]);
       if (!logs) {
         await ctx.reply('No logs yet.');
@@ -167,8 +241,10 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
     const taskId = ctx.match[1];
     const model = ctx.match[2];
     await ctx.answerCbQuery();
+    const client = clientOrReply(ctx);
+    if (!client) return;
     try {
-      await coderClient.appendTaskPrompt(taskId, `/model ${model}`);
+      await client.appendTaskPrompt(taskId, `/model ${model}`);
       await ctx.editMessageReplyMarkup(taskMenuKeyboard(taskId).reply_markup);
       await ctx.reply(
         `Model set to \`${model}\` for task \`${taskId.slice(0, 8)}\`.`,
@@ -183,9 +259,11 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
   bot.action(/^task:pause:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
     await ctx.answerCbQuery('Pausing...');
+    const client = clientOrReply(ctx);
+    if (!client) return;
     try {
-      await coderClient.pauseTask(taskId);
-      const task = await coderClient.getTask(taskId);
+      await client.pauseTask(taskId);
+      const task = await client.getTask(taskId);
       const name = task.display_name || task.name;
       const prompt = task.initial_prompt
         ? `\n\n_${task.initial_prompt.slice(0, 200)}${task.initial_prompt.length > 200 ? '…' : ''}_`
@@ -203,9 +281,11 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
   bot.action(/^task:resume:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
     await ctx.answerCbQuery('Resuming...');
+    const client = clientOrReply(ctx);
+    if (!client) return;
     try {
-      await coderClient.resumeTask(taskId);
-      const task = await coderClient.getTask(taskId);
+      await client.resumeTask(taskId);
+      const task = await client.getTask(taskId);
       const name = task.display_name || task.name;
       const prompt = task.initial_prompt
         ? `\n\n_${task.initial_prompt.slice(0, 200)}${task.initial_prompt.length > 200 ? '…' : ''}_`

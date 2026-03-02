@@ -41,6 +41,10 @@ export class CoderClient {
     return JSON.parse(text) as T;
   }
 
+  async validateKey(): Promise<void> {
+    await this.request('/api/v2/users/me');
+  }
+
   // --- Workspaces ---
 
   async listWorkspaces(): Promise<Workspace[]> {

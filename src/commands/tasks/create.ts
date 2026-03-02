@@ -1,5 +1,5 @@
 import type { Context } from 'telegraf';
-import { coderClient } from '../../bot.js';
+import { getCoderClient } from '../../bot.js';
 import { taskSessions } from '../../store/task-sessions.js';
 import { startWizard } from '../../ui/handlers/wizard.js';
 
@@ -21,9 +21,17 @@ export async function taskCreateCommand(ctx: Context): Promise<void> {
     return;
   }
 
+  const userId = ctx.from?.id;
+  if (!userId) return;
+  const coderClient = getCoderClient(userId);
+  if (!coderClient) {
+    await ctx.reply('You need to configure your API key first. Use /start.');
+    return;
+  }
+
   try {
     const templates = await coderClient.listTemplates();
-    const tpl = templates.find((t) => t.name === templateName);
+    const tpl = templates.find((t: { name: string }) => t.name === templateName);
     if (!tpl) {
       await ctx.reply(`Template "${templateName}" not found. Use /templates to see available templates.`);
       return;

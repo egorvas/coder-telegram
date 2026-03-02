@@ -1,14 +1,30 @@
 import type { Context } from 'telegraf';
 import { mainMenuKeyboard } from '../ui/keyboards.js';
+import { userStore } from '../store/user-store.js';
+import { uiState } from '../ui/state.js';
+import { config } from '../config.js';
 
-const WELCOME = `Welcome to *Coder Bot*!
-
-Use the menu below to navigate, or use text commands directly:
-
-*Workspaces*: /workspaces · /start\\_ws · /stop\\_ws
-*AI Tasks*: /tasks · /task\\_create · /task\\_logs · /task\\_append · /task\\_delete
-*Discovery*: /templates · /presets`;
+export function keySetupMessage(coderUrl: string): string {
+  return (
+    `*Welcome to Coder Bot!*\n\n` +
+    `To get started, please enter your personal Coder API key.\n\n` +
+    `You can create one at:\n\`${coderUrl}/settings/tokens\`\n\n` +
+    `Just paste the key here:`
+  );
+}
 
 export async function startCommand(ctx: Context): Promise<void> {
-  await ctx.reply(WELCOME, { parse_mode: 'Markdown', ...mainMenuKeyboard() });
+  const userId = ctx.from?.id;
+  const chatId = ctx.chat?.id;
+  if (!userId || !chatId) return;
+
+  const hasKey = !!userStore.getApiKey(userId);
+  if (!hasKey) {
+    uiState.setPendingKeySetup(chatId);
+    await ctx.reply(keySetupMessage(config.coderApiUrl), { parse_mode: 'Markdown' });
+    return;
+  }
+
+  const WELCOME = `*Coder Bot* — choose a section:`;
+  await ctx.reply(WELCOME, { parse_mode: 'Markdown', ...mainMenuKeyboard(config.adminUsers.has(userId)) });
 }

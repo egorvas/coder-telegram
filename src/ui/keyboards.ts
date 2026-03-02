@@ -8,14 +8,19 @@ function truncate(s: string, max = MAX_NAME): string {
 }
 
 // 2.1 Main menu
-export function mainMenuKeyboard() {
-  return Markup.inlineKeyboard([
+export function mainMenuKeyboard(isAdmin = false) {
+  type Row = ReturnType<typeof Markup.button.callback>[];
+  const rows: Row[] = [
     [
       Markup.button.callback('🤖 AI Tasks', 'menu:tasks'),
       Markup.button.callback('💻 Workspaces', 'menu:workspaces'),
       Markup.button.callback('📋 Templates', 'menu:templates'),
     ],
-  ]);
+  ];
+  if (isAdmin) {
+    rows.push([Markup.button.callback('👤 Admin', 'menu:admin')]);
+  }
+  return Markup.inlineKeyboard(rows);
 }
 
 // 2.2 Task list — one button per task + New Task

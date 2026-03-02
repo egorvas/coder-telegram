@@ -1,4 +1,4 @@
-import { readFileSync, mkdirSync, writeFile, existsSync } from 'node:fs';
+import { readFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { config } from '../config.js';
 import { log } from '../utils/logger.js';
@@ -70,9 +70,11 @@ class TaskSessionStore {
       }
     } catch { /* ignore */ }
     mkdirSync(dirname(config.sessionFile), { recursive: true });
-    writeFile(config.sessionFile, JSON.stringify({ ...existing, users }, null, 2), (err) => {
-      if (err) log.error('failed to save sessions', { err: String(err) });
-    });
+    try {
+      writeFileSync(config.sessionFile, JSON.stringify({ ...existing, users }, null, 2));
+    } catch (err) {
+      log.error('failed to save sessions', { err: String(err) });
+    }
   }
 
   register(taskId: string, chatId: number, userId: number): void {

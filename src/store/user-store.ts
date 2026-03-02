@@ -1,4 +1,4 @@
-import { readFileSync, mkdirSync, writeFile } from 'node:fs';
+import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { config } from '../config.js';
 import { log } from '../utils/logger.js';
@@ -53,9 +53,11 @@ class UserStore {
       registry[String(userId)] = record;
     }
     mkdirSync(dirname(config.sessionFile), { recursive: true });
-    writeFile(config.sessionFile, JSON.stringify({ ...existing, registry }, null, 2), (err) => {
-      if (err) log.error('failed to save user registry', { err: String(err) });
-    });
+    try {
+      writeFileSync(config.sessionFile, JSON.stringify({ ...existing, registry }, null, 2));
+    } catch (err) {
+      log.error('failed to save user registry', { err: String(err) });
+    }
   }
 
   isAllowed(userId: number): boolean {

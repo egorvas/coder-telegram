@@ -15,8 +15,8 @@ class UserStore {
   private records = new Map<number, UserRecord>();
 
   constructor() {
-    // Seed from env-configured allowed users (always authoritative)
-    for (const uid of config.allowedUsers) {
+    // Admin users are always allowed
+    for (const uid of config.adminUsers) {
       this.records.set(uid, { allowed: true });
     }
     this.load();
@@ -29,7 +29,7 @@ class UserStore {
       for (const [uid, record] of Object.entries(data.registry ?? {})) {
         const userId = parseInt(uid, 10);
         const seeded = this.records.get(userId);
-        // Env-seeded users keep allowed=true; load stored key
+        // Admin users (seeded from env) always stay allowed; load stored key
         this.records.set(userId, {
           ...record,
           allowed: seeded?.allowed || record.allowed,

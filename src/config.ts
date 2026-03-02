@@ -19,7 +19,6 @@ export const config = {
   coderApiUrl: process.env.CODER_API_URL!.replace(/\/$/, ''),
   pollIntervalMs: process.env.POLL_INTERVAL_MS ? parseInt(process.env.POLL_INTERVAL_MS, 10) : 15_000,
   sessionFile: process.env.SESSION_FILE ?? './data/sessions.json',
-  allowedUsers: parseIdList(process.env.ALLOWED_USERS),
   adminUsers: parseIdList(process.env.ADMIN_USERS),
   logLevel: process.env.LOG_LEVEL ?? 'info',
 };

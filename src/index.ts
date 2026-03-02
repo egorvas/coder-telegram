@@ -45,8 +45,8 @@ bot.use(async (ctx, next) => {
     await ctx.reply('You don\'t have access to this bot. Contact the administrator to be added.');
     return;
   }
-  // If allowlist is configured, enforce it
-  if (config.allowedUsers.size > 0 && !userStore.isAllowed(userId)) {
+  // If admins are configured, enforce access control via user store
+  if (config.adminUsers.size > 0 && !userStore.isAllowed(userId)) {
     await ctx.reply(`You don't have access to this bot. Ask the administrator to add your ID: \`${userId}\``, { parse_mode: 'Markdown' });
     return;
   }

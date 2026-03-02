@@ -72,8 +72,8 @@ export function startWebhookServer(bot: Telegraf): void {
         return;
       }
 
-      const taskId = taskSessions.getIdByName(taskName);
-      if (!taskId) {
+      const result = taskSessions.getIdByName(taskName);
+      if (!result) {
         console.warn(`Webhook: no session for task name "${taskName}"`);
         res.writeHead(200).end('OK');
         return;
@@ -81,11 +81,12 @@ export function startWebhookServer(bot: Telegraf): void {
 
       // Notify asynchronously — respond immediately
       res.writeHead(200).end('OK');
+      const { taskId, chatId } = result;
       const meta: WebhookMeta = {
         title: notification.payload.title,
         body: notification.payload.body,
       };
-      notifyTaskComplete(taskId, bot, meta).catch((err: unknown) => {
+      notifyTaskComplete(taskId, chatId, bot, meta).catch((err: unknown) => {
         console.error('Webhook: notification failed:', err);
       });
     });

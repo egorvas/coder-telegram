@@ -39,6 +39,9 @@ export function taskMenuKeyboard(taskId: string) {
   return Markup.inlineKeyboard([
     [
       Markup.button.callback('📋 Logs', `task:logs:${taskId}`),
+      Markup.button.callback('📄 Full Log', `task:fulllog:${taskId}`),
+    ],
+    [
       Markup.button.callback('✏️ Append', `task:append:${taskId}`),
       Markup.button.callback('🗑 Delete', `task:delete:${taskId}`),
     ],

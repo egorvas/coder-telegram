@@ -1,6 +1,5 @@
 import type { Telegraf } from 'telegraf';
 import { coderClient } from '../bot.js';
-import { taskSessions } from '../store/task-sessions.js';
 import { taskMenuKeyboard } from '../ui/keyboards.js';
 
 export interface WebhookMeta {
@@ -8,14 +7,7 @@ export interface WebhookMeta {
   body: string;
 }
 
-export async function notifyTaskComplete(taskId: string, bot: Telegraf, meta?: WebhookMeta): Promise<void> {
-  const session = taskSessions.get(taskId);
-  if (!session) {
-    console.warn(`notifyTaskComplete: no session for task ${taskId}`);
-    return;
-  }
-
-  const { chatId } = session;
+export async function notifyTaskComplete(taskId: string, chatId: number, bot: Telegraf, meta?: WebhookMeta): Promise<void> {
 
   try {
     const task = await coderClient.getTask(taskId);

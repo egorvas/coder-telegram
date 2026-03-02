@@ -98,10 +98,11 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
   // task:delete:confirm:<id> → confirmed: delete and return to list
   bot.action(/^task:delete:confirm:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
+    const userId = ctx.from?.id ?? ctx.chat?.id ?? 0;
     await ctx.answerCbQuery();
     try {
       await coderClient.deleteTask(taskId);
-      taskSessions.remove(taskId);
+      taskSessions.remove(taskId, userId);
       await ctx.reply(`Task \`${taskId.slice(0, 8)}\` deleted.`, { parse_mode: 'Markdown' });
       await showTaskDashboard(ctx);
     } catch (err) {
@@ -126,6 +127,28 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
       await ctx.reply(
         `Delete task *${name}*? This cannot be undone.`,
         { parse_mode: 'Markdown', ...confirmKeyboard(`task:delete:confirm:${taskId}`, `task:delete:cancel:${taskId}`) }
+      );
+    } catch (err) {
+      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+  // task:fulllog:<id> → send complete log as a .txt document
+  bot.action(/^task:fulllog:(.+)$/, async (ctx) => {
+    const taskId = ctx.match[1];
+    await ctx.answerCbQuery();
+    try {
+      const [task, logs] = await Promise.all([
+        coderClient.getTask(taskId),
+        coderClient.getTaskLogs(taskId),
+      ]);
+      if (!logs) {
+        await ctx.reply('No logs yet.');
+        return;
+      }
+      await ctx.replyWithDocument(
+        { source: Buffer.from(logs), filename: `${taskId.slice(0, 8)}-log.txt` },
+        { caption: `Task \`${taskId.slice(0, 8)}\` — ${task.status}`, parse_mode: 'Markdown' }
       );
     } catch (err) {
       await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);

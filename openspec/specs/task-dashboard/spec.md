@@ -30,11 +30,15 @@ The dashboard SHALL include a "Refresh" button to re-fetch current task statuses
 - **THEN** the bot SHALL re-fetch all tasks and edit the message with the updated list
 
 ### Requirement: Per-task Logs button shows task output
-Each task row SHALL have a "Logs" button that fetches and displays the task's latest log output.
+Each task row SHALL have a "Logs" button that fetches and displays the task's latest log output as an inline truncated preview, and a "Full Log" button that sends the complete log as a document.
 
 #### Scenario: User taps Logs for a task
 - **WHEN** a user taps "Logs" for a task
-- **THEN** the bot SHALL send a new message with the last 50 lines of log output and inline buttons "Append" and "Delete" for that task (reusing the task completion flow)
+- **THEN** the bot SHALL send a new message with the last portion of log output (truncated to fit Telegram's limit) and inline buttons for that task
+
+#### Scenario: User taps Full Log for a task
+- **WHEN** a user taps "Full Log" for a task
+- **THEN** the bot SHALL send the complete log as a `.txt` Telegram document with no truncation
 
 ### Requirement: Per-task Delete button removes the task
 Each task row SHALL have a "Delete" button that deletes the task after implicit confirmation.

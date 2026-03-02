@@ -13,4 +13,10 @@ export const config = {
   webhookPort: process.env.WEBHOOK_PORT ? parseInt(process.env.WEBHOOK_PORT, 10) : undefined,
   webhookSecret: process.env.WEBHOOK_SECRET,
   sessionFile: process.env.SESSION_FILE ?? './data/sessions.json',
+  allowedUsers: new Set(
+    (process.env.ALLOWED_USERS ?? '')
+      .split(',')
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => !isNaN(n))
+  ),
 };

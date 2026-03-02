@@ -43,6 +43,7 @@ cp .env.example .env
 | `WEBHOOK_PORT` | — | Port for task completion webhook server (e.g. `3000`) |
 | `WEBHOOK_SECRET` | — | HMAC secret for webhook signature verification |
 | `SESSION_FILE` | — | Path to session persistence file (default: `./data/sessions.json`) |
+| `ALLOWED_USERS` | — | Comma-separated Telegram user IDs allowed to use the bot (e.g. `123456,789012`). If unset, all users are allowed. |
 
 ### Development
 

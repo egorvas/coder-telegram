@@ -33,7 +33,8 @@ export async function taskCreateCommand(ctx: Context): Promise<void> {
     const task = await coderClient.createTask(tpl.active_version_id, null, prompt);
 
     if (ctx.chat) {
-      taskSessions.register(task.id, ctx.chat.id);
+      const userId = ctx.from?.id ?? ctx.chat.id;
+      taskSessions.register(task.id, ctx.chat.id, userId);
     }
 
     await ctx.reply(

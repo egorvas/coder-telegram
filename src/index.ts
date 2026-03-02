@@ -7,7 +7,7 @@ import { workspacesCommand } from './commands/workspaces.js';
 import { templatesCommand } from './commands/templates/list.js';
 import { taskSessions } from './store/task-sessions.js';
 import { userStore } from './store/user-store.js';
-import { taskMenuKeyboard, mainMenuKeyboard } from './ui/keyboards.js';
+import { mainMenuKeyboard } from './ui/keyboards.js';
 import { startPoller } from './flows/task-poller.js';
 import { uiState } from './ui/state.js';
 import { registerMainMenuHandlers } from './ui/handlers/main-menu.js';
@@ -154,8 +154,8 @@ bot.on('text', async (ctx) => {
     try {
       await client.appendTaskPrompt(uiPending.taskId, text);
       await ctx.reply(
-        `Prompt appended to task \`${uiPending.taskId.slice(0, 8)}\`.`,
-        { parse_mode: 'Markdown', ...taskMenuKeyboard(uiPending.taskId) }
+        `Prompt appended to task \`${uiPending.taskId.slice(0, 8)}\`. I'll notify you when it's done.`,
+        { parse_mode: 'Markdown' }
       );
     } catch (err) {
       await handleCoderError(ctx, err, userId);

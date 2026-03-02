@@ -42,8 +42,10 @@ async function poll(bot: Telegraf): Promise<void> {
       if (agentState !== undefined && agentState !== lastKnownAgentState) {
         stateChanges++;
         log.info('task agent state change', { taskId, from: lastKnownAgentState, to: agentState, userId });
-        // Notify on any agent state transition (AI finished/changed state)
-        await notifyTaskComplete(taskId, chatId, userId, bot, agentState);
+        // Only notify when AI finishes (idle) and task is active (not still initializing)
+        if (agentState === 'idle' && status === 'active') {
+          await notifyTaskComplete(taskId, chatId, userId, bot, agentState);
+        }
       }
 
       const terminalStatuses = ['stopped', 'error', 'unknown'];

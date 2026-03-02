@@ -1,4 +1,4 @@
-import { readFileSync, mkdirSync, writeFile } from 'node:fs';
+import { readFileSync, mkdirSync, writeFile, existsSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { config } from '../config.js';
 import { log } from '../utils/logger.js';
@@ -62,9 +62,15 @@ class TaskSessionStore {
         sessions: Object.fromEntries(sessions),
       };
     }
-    const data: PersistedData = { users };
+    // Preserve other sections (e.g. registry from user-store)
+    let existing: Record<string, unknown> = {};
+    try {
+      if (existsSync(config.sessionFile)) {
+        existing = JSON.parse(readFileSync(config.sessionFile, 'utf-8')) as Record<string, unknown>;
+      }
+    } catch { /* ignore */ }
     mkdirSync(dirname(config.sessionFile), { recursive: true });
-    writeFile(config.sessionFile, JSON.stringify(data, null, 2), (err) => {
+    writeFile(config.sessionFile, JSON.stringify({ ...existing, users }, null, 2), (err) => {
       if (err) log.error('failed to save sessions', { err: String(err) });
     });
   }

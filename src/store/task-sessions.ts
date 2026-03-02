@@ -6,6 +6,7 @@ import { log } from '../utils/logger.js';
 interface TaskSession {
   chatId: number;
   lastKnownStatus?: string;
+  lastKnownAgentState?: string;
 }
 
 interface PendingAppend {
@@ -85,19 +86,20 @@ class TaskSessionStore {
     }
   }
 
-  updateStatus(taskId: string, userId: number, status: string): void {
+  updateStatus(taskId: string, userId: number, status: string, agentState?: string): void {
     const session = this.users.get(userId)?.sessions.get(taskId);
     if (session) {
       session.lastKnownStatus = status;
+      if (agentState !== undefined) session.lastKnownAgentState = agentState;
       this.save();
     }
   }
 
-  getAllSessions(): Array<{ taskId: string; chatId: number; userId: number; lastKnownStatus?: string }> {
-    const result: Array<{ taskId: string; chatId: number; userId: number; lastKnownStatus?: string }> = [];
+  getAllSessions(): Array<{ taskId: string; chatId: number; userId: number; lastKnownStatus?: string; lastKnownAgentState?: string }> {
+    const result: Array<{ taskId: string; chatId: number; userId: number; lastKnownStatus?: string; lastKnownAgentState?: string }> = [];
     for (const [userId, { sessions }] of this.users) {
       for (const [taskId, session] of sessions) {
-        result.push({ taskId, chatId: session.chatId, userId, lastKnownStatus: session.lastKnownStatus });
+        result.push({ taskId, chatId: session.chatId, userId, lastKnownStatus: session.lastKnownStatus, lastKnownAgentState: session.lastKnownAgentState });
       }
     }
     return result;

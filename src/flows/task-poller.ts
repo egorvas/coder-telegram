@@ -22,7 +22,7 @@ async function poll(bot: Telegraf): Promise<void> {
   let stateChanges = 0;
   const usersSeen = new Set<number>();
 
-  for (const { taskId, chatId, userId, lastKnownStatus } of sessions) {
+  for (const { taskId, chatId, userId, lastKnownStatus, lastKnownAgentState } of sessions) {
     const client = getCoderClient(userId);
     if (!client) continue;
 
@@ -31,11 +31,19 @@ async function poll(bot: Telegraf): Promise<void> {
     try {
       const task = await client.getTask(taskId);
       const status = task.status;
+      const agentState = task.current_state?.state;
       tasksChecked++;
 
       if (status !== lastKnownStatus) {
         stateChanges++;
-        log.info('task state change', { taskId, from: lastKnownStatus, to: status, userId });
+        log.info('task status change', { taskId, from: lastKnownStatus, to: status, userId });
+      }
+
+      if (agentState !== undefined && agentState !== lastKnownAgentState) {
+        stateChanges++;
+        log.info('task agent state change', { taskId, from: lastKnownAgentState, to: agentState, userId });
+        // Notify on any agent state transition (AI finished/changed state)
+        await notifyTaskComplete(taskId, chatId, userId, bot, agentState);
       }
 
       const terminalStatuses = ['stopped', 'error', 'unknown'];
@@ -43,7 +51,7 @@ async function poll(bot: Telegraf): Promise<void> {
         await notifyTaskComplete(taskId, chatId, userId, bot, status);
       }
 
-      taskSessions.updateStatus(taskId, userId, status);
+      taskSessions.updateStatus(taskId, userId, status, agentState);
     } catch (err) {
       if (err instanceof CoderAuthError) {
         log.warn('coder auth expired in poller, clearing key', { userId });

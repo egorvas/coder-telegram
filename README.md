@@ -42,6 +42,7 @@ cp .env.example .env
 | `CODER_API_TOKEN` | ✓ | Coder API token (`coder tokens create`) |
 | `WEBHOOK_PORT` | — | Port for task completion webhook server (e.g. `3000`) |
 | `WEBHOOK_SECRET` | — | HMAC secret for webhook signature verification |
+| `SESSION_FILE` | — | Path to session persistence file (default: `./data/sessions.json`) |
 
 ### Development
 
@@ -95,6 +96,8 @@ services:
       CODER_API_TOKEN: ${CODER_API_TOKEN}
       # WEBHOOK_PORT: 3000
       # WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+    volumes:
+      - ./data:/app/data   # persist sessions across restarts
     # ports:
     #   - "3000:3000"
 ```

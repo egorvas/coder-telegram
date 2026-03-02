@@ -10,8 +10,7 @@ export const config = {
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN!,
   coderApiUrl: process.env.CODER_API_URL!.replace(/\/$/, ''),
   coderApiToken: process.env.CODER_API_TOKEN!,
-  webhookPort: process.env.WEBHOOK_PORT ? parseInt(process.env.WEBHOOK_PORT, 10) : undefined,
-  webhookSecret: process.env.WEBHOOK_SECRET,
+  pollIntervalMs: process.env.POLL_INTERVAL_MS ? parseInt(process.env.POLL_INTERVAL_MS, 10) : 15_000,
   sessionFile: process.env.SESSION_FILE ?? './data/sessions.json',
   allowedUsers: new Set(
     (process.env.ALLOWED_USERS ?? '')

@@ -7,7 +7,7 @@ import { workspacesCommand } from './commands/workspaces.js';
 import { templatesCommand } from './commands/templates/list.js';
 import { taskSessions } from './store/task-sessions.js';
 import { taskMenuKeyboard } from './ui/keyboards.js';
-import { startWebhookServer } from './webhook/server.js';
+import { startPoller } from './flows/task-poller.js';
 import { uiState } from './ui/state.js';
 import { registerMainMenuHandlers } from './ui/handlers/main-menu.js';
 import { registerTaskDashboardHandlers } from './ui/handlers/task-dashboard.js';
@@ -82,20 +82,6 @@ bot.on('text', async (ctx) => {
     return;
   }
 
-  // Priority 3: session pending append (from webhook completion notification)
-  const sessionPending = taskSessions.getPendingAppend(chatId);
-  if (sessionPending) {
-    taskSessions.clearPendingAppend(chatId);
-    try {
-      await coderClient.appendTaskPrompt(sessionPending.taskId, text);
-      await ctx.reply(
-        `Prompt appended to task \`${sessionPending.taskId.slice(0, 8)}\`.`,
-        { parse_mode: 'Markdown', ...taskMenuKeyboard(sessionPending.taskId) }
-      );
-    } catch (err) {
-      await ctx.reply(`Failed to append: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
 });
 
 // ─── Telegram command menu ────────────────────────────────────────────────────
@@ -108,7 +94,7 @@ await bot.telegram.setMyCommands([
 ]);
 
 // ─── Start ────────────────────────────────────────────────────────────────────
-startWebhookServer(bot);
+startPoller(bot, config.pollIntervalMs);
 console.log('Coder Telegram bot starting...');
 await bot.launch();
 console.log('Bot is running.');

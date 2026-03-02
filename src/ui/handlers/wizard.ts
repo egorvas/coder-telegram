@@ -66,7 +66,6 @@ async function createFromWizard(ctx: Context, wizard: WizardState, prompt: strin
       const task = await coderClient.createTask(templateVersionId, presetId ?? null, prompt);
       const userId = ctx.from?.id ?? chatId;
       taskSessions.register(task.id, chatId, userId);
-      taskSessions.registerName(task.name, task.id, userId);
       await ctx.reply(
         `Task created!\nID: \`${task.id}\`\nStatus: ${task.status}${presetName ? `\nPreset: ${presetName}` : ''}`,
         { parse_mode: 'Markdown' }

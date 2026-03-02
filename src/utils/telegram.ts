@@ -1,4 +1,17 @@
 const TG_LIMIT = 4096;
+
+// Windows-1252 bytes 0x80–0x9F misinterpreted as Latin-1 appear as U+0080–U+009F
+// in JavaScript strings. Replace common ones with readable ASCII, strip the rest.
+const WIN1252_MAP: Record<string, string> = {
+  '\u0091': "'", '\u0092': "'",
+  '\u0093': '"', '\u0094': '"',
+  '\u0096': '-', '\u0097': '-',
+  '\u0085': '...',
+};
+
+export function sanitizeText(text: string): string {
+  return text.replace(/[\u0080-\u009F]/g, (c) => WIN1252_MAP[c] ?? '');
+}
 const CODE_BLOCK_OVERHEAD = 8; // ```\n ... \n```
 
 /**

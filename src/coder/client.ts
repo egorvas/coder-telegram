@@ -1,5 +1,13 @@
 import type { Workspace, WorkspaceListResponse, WorkspaceBuild, CoderTemplate, CoderPreset, CoderTask } from './types.js';
 
+// Escape all non-ASCII chars as \uXXXX so the HTTP body is pure ASCII.
+// Workaround for Coder server dropping leading UTF-8 bytes (e.g. Cyrillic Б = \xD0\x91 → 0x91).
+function toAsciiJson(data: unknown): string {
+  return JSON.stringify(data).replace(/[^\x00-\x7F]/g,
+    (c) => `\\u${c.codePointAt(0)!.toString(16).padStart(4, '0')}`
+  );
+}
+
 export class CoderClient {
   private readonly baseUrl: string;
   private readonly token: string;
@@ -51,7 +59,7 @@ export class CoderClient {
     const ws = await this.findWorkspace(name);
     return this.request<WorkspaceBuild>(`/api/v2/workspaces/${ws.id}/builds`, {
       method: 'POST',
-      body: JSON.stringify({ transition: 'start' }),
+      body: toAsciiJson({ transition: 'start' }),
     });
   }
 
@@ -59,14 +67,22 @@ export class CoderClient {
     const ws = await this.findWorkspace(name);
     return this.request<WorkspaceBuild>(`/api/v2/workspaces/${ws.id}/builds`, {
       method: 'POST',
-      body: JSON.stringify({ transition: 'stop' }),
+      body: toAsciiJson({ transition: 'stop' }),
+    });
+  }
+
+  async deleteWorkspace(name: string): Promise<WorkspaceBuild> {
+    const ws = await this.findWorkspace(name);
+    return this.request<WorkspaceBuild>(`/api/v2/workspaces/${ws.id}/builds`, {
+      method: 'POST',
+      body: toAsciiJson({ transition: 'delete' }),
     });
   }
 
   async createWorkspace(templateVersionId: string, presetId: string | null, name: string): Promise<Workspace> {
     return this.request<Workspace>('/api/v2/users/me/workspaces', {
       method: 'POST',
-      body: JSON.stringify({
+      body: toAsciiJson({
         template_version_id: templateVersionId,
         ...(presetId ? { template_version_preset_id: presetId } : {}),
         name,
@@ -96,7 +112,7 @@ export class CoderClient {
   async createTask(templateVersionId: string, presetId: string | null, prompt: string): Promise<CoderTask> {
     return this.request<CoderTask>('/api/v2/tasks/me', {
       method: 'POST',
-      body: JSON.stringify({
+      body: toAsciiJson({
         template_version_id: templateVersionId,
         ...(presetId ? { template_version_preset_id: presetId } : {}),
         input: prompt,
@@ -117,7 +133,7 @@ export class CoderClient {
   async appendTaskPrompt(taskId: string, prompt: string): Promise<void> {
     await this.request(`/api/v2/tasks/me/${taskId}/send`, {
       method: 'POST',
-      body: JSON.stringify({ input: prompt }),
+      body: toAsciiJson({ input: prompt }),
     });
   }
 

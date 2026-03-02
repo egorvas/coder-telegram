@@ -93,6 +93,7 @@ export function workspaceActionKeyboard(ws: Workspace) {
         ? Markup.button.callback('⏹ Stop', `ws:stop:${truncate(ws.name, 51)}`)
         : Markup.button.callback('▶️ Start', `ws:start:${truncate(ws.name, 50)}`),
     ],
+    [Markup.button.callback('🗑 Delete', `ws:delete:${truncate(ws.name, 49)}`)],
     [Markup.button.url('🌐 Open in Coder', `${config.coderApiUrl}/@me/${ws.name}`)],
     [Markup.button.callback('« Back', 'ws:back')],
   ]);

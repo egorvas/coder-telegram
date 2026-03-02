@@ -102,6 +102,46 @@ export function registerWorkspaceMenuHandlers(bot: Telegraf): void {
     );
   });
 
+  // ws:delete:confirm:<name> → confirmed: delete workspace
+  bot.action(/^ws:delete:confirm:(.+)$/, async (ctx) => {
+    const name = ctx.match[1];
+    await ctx.answerCbQuery('Deleting...');
+    try {
+      await coderClient.deleteWorkspace(name);
+      await ctx.reply(`Workspace *${name}* deletion initiated.`, { parse_mode: 'Markdown' });
+      await showWorkspaceList(ctx);
+    } catch (err) {
+      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+  // ws:delete:cancel:<name> → cancelled: show workspace action menu
+  bot.action(/^ws:delete:cancel:(.+)$/, async (ctx) => {
+    const name = ctx.match[1];
+    await ctx.answerCbQuery();
+    try {
+      const workspaces = await coderClient.listWorkspaces();
+      const ws = workspaces.find((w) => w.name === name);
+      if (ws) {
+        await ctx.reply(`Workspace *${name}*`, { parse_mode: 'Markdown', ...workspaceActionKeyboard(ws) });
+      } else {
+        await showWorkspaceList(ctx);
+      }
+    } catch (err) {
+      await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+  // ws:delete:<name> → show confirmation prompt
+  bot.action(/^ws:delete:(.+)$/, async (ctx) => {
+    const name = ctx.match[1];
+    await ctx.answerCbQuery();
+    await ctx.reply(
+      `Delete workspace *${name}*? This cannot be undone.`,
+      { parse_mode: 'Markdown', ...confirmKeyboard(`ws:delete:confirm:${name}`, `ws:delete:cancel:${name}`) }
+    );
+  });
+
   // ws:refresh → reload workspace list
   bot.action('ws:refresh', async (ctx) => {
     await ctx.answerCbQuery('Refreshing...');

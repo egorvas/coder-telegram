@@ -13,6 +13,7 @@ import { registerMainMenuHandlers } from './ui/handlers/main-menu.js';
 import { registerTaskDashboardHandlers } from './ui/handlers/task-dashboard.js';
 import { registerWizardHandlers, handleWizardPromptInput, startWizard } from './ui/handlers/wizard.js';
 import { registerWorkspaceMenuHandlers } from './ui/handlers/workspace-menu.js';
+import { sanitizeText } from './utils/telegram.js';
 import { registerTemplateBrowserHandlers } from './ui/handlers/template-browser.js';
 
 // ─── Middleware: auth guard ───────────────────────────────────────────────────
@@ -55,7 +56,7 @@ bot.command('templates', templatesCommand);
 // ─── Unified text handler ─────────────────────────────────────────────────────
 bot.on('text', async (ctx) => {
   const chatId = ctx.chat.id;
-  const text = ctx.message.text;
+  const text = sanitizeText(ctx.message.text);
 
   if (text.startsWith('/')) return;
 

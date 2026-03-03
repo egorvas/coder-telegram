@@ -142,18 +142,16 @@ export function registerTaskDashboardHandlers(botInstance: Telegraf): void {
       const task = await client.getTask(taskId);
       const session = taskSessions.get(taskId, userId);
 
+      // Delete old card if it exists, then create a fresh one at the bottom
       if (session?.cardMessageId) {
-        // Update existing card
-        await updateCard(bot, chatId, session.cardMessageId, task, {
-          lastPrompt: session.lastPrompt,
-        });
-      } else {
-        // No card yet — create one
-        const msgId = await sendCard(bot, chatId, task, {
-          lastPrompt: session?.lastPrompt,
-        });
-        taskSessions.setCardMessageId(taskId, userId, msgId);
+        try {
+          await bot.telegram.deleteMessage(chatId, session.cardMessageId);
+        } catch { /* already gone */ }
       }
+      const msgId = await sendCard(bot, chatId, task, {
+        lastPrompt: session?.lastPrompt,
+      });
+      taskSessions.setCardMessageId(taskId, userId, msgId);
     } catch (err) {
       await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }

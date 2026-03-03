@@ -17,6 +17,7 @@ import { registerWorkspaceMenuHandlers } from './ui/handlers/workspace-menu.js';
 import { sanitizeText } from './utils/telegram.js';
 import { registerTemplateBrowserHandlers } from './ui/handlers/template-browser.js';
 import { registerAdminPanelHandlers, showAdminPanel } from './ui/handlers/admin-panel.js';
+import { updateCard } from './ui/task-card.js';
 import { CoderClient } from './coder/client.js';
 import { log } from './utils/logger.js';
 import { handleCoderError } from './utils/coder-error.js';
@@ -57,10 +58,8 @@ bot.use(async (ctx, next) => {
 bot.use(async (ctx, next) => {
   if ('callbackQuery' in ctx.update && ctx.chat?.id) {
     const chatId = ctx.chat.id;
-    uiState.clearPendingAppend(chatId);
     uiState.clearPendingKeySetup(chatId);
     uiState.clearPendingAdminAdd(chatId);
-    taskSessions.clearPendingAppend(chatId);
   }
   return next();
 });
@@ -143,26 +142,30 @@ bot.on('text', async (ctx) => {
     return;
   }
 
-  // Priority 2: uiState pending append (from task dashboard Append button)
-  const uiPending = uiState.getPendingAppend(chatId);
-  if (uiPending) {
-    uiState.clearPendingAppend(chatId);
-    const client = getCoderClient(userId);
-    if (!client) {
-      await ctx.reply('You need to configure your API key first. Use /start.');
+  // Priority 2: reply to a task card → append prompt
+  if (ctx.message.reply_to_message) {
+    const repliedMsgId = ctx.message.reply_to_message.message_id;
+    const session = taskSessions.findByCardMessageId(chatId, userId, repliedMsgId);
+    if (session) {
+      const client = getCoderClient(userId);
+      if (!client) {
+        await ctx.reply('You need to configure your API key first. Use /start.');
+        return;
+      }
+      log.info('task append via reply', { taskId: session.taskId, userId });
+      try {
+        await client.appendTaskPrompt(session.taskId, text);
+        taskSessions.setLastPrompt(session.taskId, userId, text);
+        // Update the card to reflect the new prompt
+        const task = await client.getTask(session.taskId);
+        await updateCard(bot, chatId, repliedMsgId, task, {
+          lastPrompt: text,
+        });
+      } catch (err) {
+        await handleCoderError(ctx, err, userId);
+      }
       return;
     }
-    log.info('task append', { taskId: uiPending.taskId, userId });
-    try {
-      await client.appendTaskPrompt(uiPending.taskId, text);
-      await ctx.reply(
-        `Prompt appended to task \`${uiPending.taskId.slice(0, 8)}\`. I'll notify you when it's done.`,
-        { parse_mode: 'Markdown' }
-      );
-    } catch (err) {
-      await handleCoderError(ctx, err, userId);
-    }
-    return;
   }
 });
 

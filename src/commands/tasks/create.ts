@@ -1,7 +1,8 @@
 import type { Context } from 'telegraf';
-import { getCoderClient } from '../../bot.js';
+import { bot, getCoderClient } from '../../bot.js';
 import { taskSessions } from '../../store/task-sessions.js';
 import { startWizard } from '../../ui/handlers/wizard.js';
+import { sendCard } from '../../ui/task-card.js';
 import { handleCoderError } from '../../utils/coder-error.js';
 
 export async function taskCreateCommand(ctx: Context): Promise<void> {
@@ -38,18 +39,16 @@ export async function taskCreateCommand(ctx: Context): Promise<void> {
       return;
     }
 
-    await ctx.reply(`Creating AI task from *${templateName}*...`, { parse_mode: 'Markdown' });
+    await ctx.reply(`Creating AI task from *${templateName}*…`, { parse_mode: 'Markdown' });
     const task = await coderClient.createTask(tpl.active_version_id, null, prompt);
 
     if (ctx.chat) {
       const userId = ctx.from?.id ?? ctx.chat.id;
       taskSessions.register(task.id, ctx.chat.id, userId);
+      const messageId = await sendCard(bot, ctx.chat.id, task);
+      taskSessions.setCardMessageId(task.id, userId, messageId);
+      taskSessions.updateStatus(task.id, userId, task.status, task.current_state?.state);
     }
-
-    await ctx.reply(
-      `Task created!\nID: \`${task.id}\`\nStatus: ${task.status}`,
-      { parse_mode: 'Markdown' }
-    );
   } catch (err) {
     await handleCoderError(ctx, err, userId);
   }

@@ -1,13 +1,13 @@
 import type { Telegraf, Context } from 'telegraf';
 import { Markup } from 'telegraf';
-import { getCoderClient } from '../../bot.js';
-import { buildLogMessage } from '../../utils/telegram.js';
-import { taskListKeyboard, taskMenuKeyboard, modelKeyboard, confirmKeyboard } from '../keyboards.js';
+import { bot, getCoderClient } from '../../bot.js';
+import { taskListKeyboard, taskCardKeyboard, modelKeyboard, confirmKeyboard } from '../keyboards.js';
 import { taskSessions } from '../../store/task-sessions.js';
 import { uiState } from '../state.js';
 import { userStore } from '../../store/user-store.js';
 import type { CoderTask } from '../../coder/types.js';
 import { startWizard } from './wizard.js';
+import { sendCard, updateCard } from '../task-card.js';
 import { log } from '../../utils/logger.js';
 import { handleCoderError, CoderAuthError } from '../../utils/coder-error.js';
 
@@ -110,76 +110,71 @@ export async function showTaskDashboard(ctx: Context): Promise<void> {
   }
 }
 
-export function registerTaskDashboardHandlers(bot: Telegraf): void {
+export function registerTaskDashboardHandlers(botInstance: Telegraf): void {
   // dashboard:refresh → re-fetch task list
-  bot.action('dashboard:refresh', async (ctx) => {
-    await ctx.answerCbQuery('Refreshing...');
+  botInstance.action('dashboard:refresh', async (ctx) => {
+    await ctx.answerCbQuery('Refreshing…');
     await showTaskDashboard(ctx);
   });
 
   // dashboard:new → start task creation wizard
-  bot.action('dashboard:new', async (ctx) => {
+  botInstance.action('dashboard:new', async (ctx) => {
     await ctx.answerCbQuery();
     await startWizard(ctx, 'task');
   });
 
   // dashboard:back → return to task list
-  bot.action('dashboard:back', async (ctx) => {
+  botInstance.action('dashboard:back', async (ctx) => {
     await ctx.answerCbQuery();
     await showTaskDashboard(ctx);
   });
 
-  // task:select:<id> → show task submenu
-  bot.action(/^task:select:(.+)$/, async (ctx) => {
+  // task:select:<id> → send or update live card
+  botInstance.action(/^task:select:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
+    const userId = ctx.from?.id ?? 0;
+    const chatId = ctx.chat?.id;
+    if (!chatId) return;
     await ctx.answerCbQuery();
     const client = clientOrReply(ctx);
     if (!client) return;
     try {
       const task = await client.getTask(taskId);
-      const name = task.display_name || task.name;
-      const prompt = task.initial_prompt
-        ? `\n\n_${task.initial_prompt.slice(0, 200)}${task.initial_prompt.length > 200 ? '…' : ''}_`
-        : '';
-      const agentState = taskSessions.getAgentState(taskId, ctx.from?.id ?? 0);
-      await ctx.editMessageText(
-        `*${name}*\nStatus: ${task.status}${prompt}`,
-        { parse_mode: 'Markdown', ...taskMenuKeyboard(taskId, agentState) }
-      );
+      const session = taskSessions.get(taskId, userId);
+
+      if (session?.cardMessageId) {
+        // Update existing card
+        await updateCard(bot, chatId, session.cardMessageId, task, {
+          lastPrompt: session.lastPrompt,
+        });
+      } else {
+        // No card yet — create one
+        const msgId = await sendCard(bot, chatId, task, {
+          lastPrompt: session?.lastPrompt,
+        });
+        taskSessions.setCardMessageId(taskId, userId, msgId);
+      }
     } catch (err) {
       await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 
-  // task:logs:<id> → fetch and send logs
-  bot.action(/^task:logs:(.+)$/, async (ctx) => {
-    const taskId = ctx.match[1];
-    await ctx.answerCbQuery();
-    const client = clientOrReply(ctx);
-    if (!client) return;
-    try {
-      const [task, logs] = await Promise.all([
-        client.getTask(taskId),
-        client.getTaskLogs(taskId),
-      ]);
-      const agentState = taskSessions.getAgentState(taskId, ctx.from?.id ?? 0);
-      await ctx.reply(
-        buildLogMessage(taskId, task.status, logs),
-        { parse_mode: 'Markdown', ...taskMenuKeyboard(taskId, agentState) }
-      );
-    } catch (err) {
-      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
-    }
-  });
-
-  // task:delete:confirm:<id> → confirmed: delete and return to list
-  bot.action(/^task:delete:confirm:(.+)$/, async (ctx) => {
+  // task:delete:confirm:<id> → confirmed: delete task and clean up card
+  botInstance.action(/^task:delete:confirm:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
     const userId = ctx.from?.id ?? ctx.chat?.id ?? 0;
+    const chatId = ctx.chat?.id;
     await ctx.answerCbQuery();
     const client = clientOrReply(ctx);
     if (!client) return;
     try {
+      // Try to delete the card message
+      const cardMsgId = taskSessions.getCardMessageId(taskId, userId);
+      if (cardMsgId && chatId) {
+        try {
+          await bot.telegram.deleteMessage(chatId, cardMsgId);
+        } catch { /* card already gone */ }
+      }
       await client.deleteTask(taskId);
       taskSessions.remove(taskId, userId);
       await ctx.reply(`Task \`${taskId.slice(0, 8)}\` deleted.`, { parse_mode: 'Markdown' });
@@ -189,16 +184,16 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
     }
   });
 
-  // task:delete:cancel:<id> → cancelled: show task menu
-  bot.action(/^task:delete:cancel:(.+)$/, async (ctx) => {
+  // task:delete:cancel:<id> → cancelled
+  botInstance.action(/^task:delete:cancel:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery('Cancelled');
     const agentState = taskSessions.getAgentState(taskId, ctx.from?.id ?? 0);
-    await ctx.reply('Deletion cancelled.', taskMenuKeyboard(taskId, agentState));
+    await ctx.editMessageReplyMarkup(taskCardKeyboard(taskId, agentState).reply_markup);
   });
 
   // task:delete:<id> → show confirmation prompt
-  bot.action(/^task:delete:(.+)$/, async (ctx) => {
+  botInstance.action(/^task:delete:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
     await ctx.answerCbQuery();
     const client = clientOrReply(ctx);
@@ -216,7 +211,7 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
   });
 
   // task:fulllog:<id> → send complete log as a .txt document
-  bot.action(/^task:fulllog:(.+)$/, async (ctx) => {
+  botInstance.action(/^task:fulllog:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
     await ctx.answerCbQuery();
     const client = clientOrReply(ctx);
@@ -230,10 +225,9 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
         await ctx.reply('No logs yet.');
         return;
       }
-      const agentState = taskSessions.getAgentState(taskId, ctx.from?.id ?? 0);
       await ctx.replyWithDocument(
         { source: Buffer.from(logs), filename: `${taskId.slice(0, 8)}-log.txt` },
-        { caption: `Task \`${taskId.slice(0, 8)}\` — ${task.status}`, parse_mode: 'Markdown', ...taskMenuKeyboard(taskId, agentState) }
+        { caption: `Task \`${taskId.slice(0, 8)}\` — ${task.status}`, parse_mode: 'Markdown' }
       );
     } catch (err) {
       await handleCoderError(ctx, err, ctx.from?.id ?? 0);
@@ -241,42 +235,25 @@ export function registerTaskDashboardHandlers(bot: Telegraf): void {
   });
 
   // task:model:<id> → show model selection keyboard
-  bot.action(/^task:model:([^:]+)$/, async (ctx) => {
+  botInstance.action(/^task:model:([^:]+)$/, async (ctx) => {
     const taskId = ctx.match[1];
     await ctx.answerCbQuery();
     await ctx.editMessageReplyMarkup(modelKeyboard(taskId).reply_markup);
   });
 
   // task:model:set:<id>:<model> → send /model <model> as append
-  bot.action(/^task:model:set:([^:]+):(.+)$/, async (ctx) => {
+  botInstance.action(/^task:model:set:([^:]+):(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
     const model = ctx.match[2];
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery(`Model set to ${model}`);
     const client = clientOrReply(ctx);
     if (!client) return;
     try {
       await client.appendTaskPrompt(taskId, `/model ${model}`);
       const agentState = taskSessions.getAgentState(taskId, ctx.from?.id ?? 0);
-      await ctx.editMessageReplyMarkup(taskMenuKeyboard(taskId, agentState).reply_markup);
-      await ctx.reply(
-        `Model set to \`${model}\` for task \`${taskId.slice(0, 8)}\`.`,
-        { parse_mode: 'Markdown' }
-      );
+      await ctx.editMessageReplyMarkup(taskCardKeyboard(taskId, agentState).reply_markup);
     } catch (err) {
       await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
-  });
-
-  // task:append:<id> → set pending append, ask for prompt
-  bot.action(/^task:append:(.+)$/, async (ctx) => {
-    const taskId = ctx.match[1];
-    const chatId = ctx.chat?.id;
-    if (!chatId) return;
-    await ctx.answerCbQuery();
-    uiState.setPendingAppend(chatId, taskId);
-    await ctx.reply(
-      `What do you want to add to task \`${taskId.slice(0, 8)}\`?`,
-      { parse_mode: 'Markdown' }
-    );
   });
 }

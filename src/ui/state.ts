@@ -9,7 +9,6 @@ export interface WizardState {
 
 interface UiState {
   wizard?: WizardState;
-  pendingAppend?: { taskId: string };
   pendingKeySetup?: boolean;
   pendingAdminAdd?: boolean;
   globalView?: boolean;
@@ -38,19 +37,6 @@ class UiStateStore {
   clearWizard(chatId: number): void {
     const s = this.get(chatId);
     delete s.wizard;
-  }
-
-  setPendingAppend(chatId: number, taskId: string): void {
-    this.get(chatId).pendingAppend = { taskId };
-  }
-
-  getPendingAppend(chatId: number): { taskId: string } | null {
-    return this.get(chatId).pendingAppend ?? null;
-  }
-
-  clearPendingAppend(chatId: number): void {
-    const s = this.get(chatId);
-    delete s.pendingAppend;
   }
 
   setPendingKeySetup(chatId: number): void {

@@ -39,27 +39,40 @@ export function taskListKeyboard(tasks: CoderTask[]) {
   return Markup.inlineKeyboard(rows);
 }
 
-// 2.3 Task submenu — actions for a specific task
+// 2.3 Task submenu — actions for a specific task (kept for backward compat)
 export function taskMenuKeyboard(taskId: string, agentState?: string) {
   type Btn = ReturnType<typeof Markup.button.callback> | ReturnType<typeof Markup.button.url>;
   const actionRow: Btn[] = agentState === 'working'
     ? [
-        Markup.button.callback('🧠 Model', `task:model:${taskId}`),
         Markup.button.callback('🗑 Delete', `task:delete:${taskId}`),
       ]
     : [
-        Markup.button.callback('✏️ Append', `task:append:${taskId}`),
+        Markup.button.callback('📄 Full Log', `task:fulllog:${taskId}`),
         Markup.button.callback('🧠 Model', `task:model:${taskId}`),
         Markup.button.callback('🗑 Delete', `task:delete:${taskId}`),
       ];
-  const rows: Btn[][] = [
-    [
-      Markup.button.callback('📋 Logs', `task:logs:${taskId}`),
+  const rows: Btn[][] = [actionRow];
+  rows.push([Markup.button.url('🌐 Open', `${config.coderApiUrl}/tasks/me/${taskId}`)]);
+  rows.push([Markup.button.callback('« Tasks', 'dashboard:back')]);
+  return Markup.inlineKeyboard(rows);
+}
+
+// 2.3b Live card keyboard
+export function taskCardKeyboard(taskId: string, agentState?: string) {
+  type Btn = ReturnType<typeof Markup.button.callback> | ReturnType<typeof Markup.button.url>;
+  const rows: Btn[][] = [];
+
+  if (agentState !== 'working') {
+    rows.push([
       Markup.button.callback('📄 Full Log', `task:fulllog:${taskId}`),
-    ],
-    actionRow,
-  ];
-  rows.push([Markup.button.url('🌐 Open in Coder', `${config.coderApiUrl}/tasks/me/${taskId}`)]);
+      Markup.button.callback('🧠 Model', `task:model:${taskId}`),
+    ]);
+  }
+
+  rows.push([
+    Markup.button.callback('🗑 Delete', `task:delete:${taskId}`),
+    Markup.button.url('🌐 Open', `${config.coderApiUrl}/tasks/me/${taskId}`),
+  ]);
   rows.push([Markup.button.callback('« Tasks', 'dashboard:back')]);
   return Markup.inlineKeyboard(rows);
 }

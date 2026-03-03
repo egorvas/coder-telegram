@@ -5,12 +5,10 @@ import { log } from '../utils/logger.js';
 
 interface TaskSession {
   chatId: number;
+  cardMessageId?: number;
   lastKnownStatus?: string;
   lastKnownAgentState?: string;
-}
-
-interface PendingAppend {
-  taskId: string;
+  lastPrompt?: string;
 }
 
 interface UserData {
@@ -24,7 +22,6 @@ interface PersistedData {
 class TaskSessionStore {
   // userId → { sessions: taskId→session }
   private users = new Map<number, { sessions: Map<string, TaskSession> }>();
-  private pendingAppends = new Map<number, PendingAppend>();
 
   constructor() {
     this.load();
@@ -107,26 +104,53 @@ class TaskSessionStore {
     return this.users.get(userId)?.sessions.get(taskId)?.lastKnownAgentState;
   }
 
-  getAllSessions(): Array<{ taskId: string; chatId: number; userId: number; lastKnownStatus?: string; lastKnownAgentState?: string }> {
-    const result: Array<{ taskId: string; chatId: number; userId: number; lastKnownStatus?: string; lastKnownAgentState?: string }> = [];
+  getAllSessions(): Array<{ taskId: string; chatId: number; userId: number; lastKnownStatus?: string; lastKnownAgentState?: string; cardMessageId?: number; lastPrompt?: string }> {
+    const result: Array<{ taskId: string; chatId: number; userId: number; lastKnownStatus?: string; lastKnownAgentState?: string; cardMessageId?: number; lastPrompt?: string }> = [];
     for (const [userId, { sessions }] of this.users) {
       for (const [taskId, session] of sessions) {
-        result.push({ taskId, chatId: session.chatId, userId, lastKnownStatus: session.lastKnownStatus, lastKnownAgentState: session.lastKnownAgentState });
+        result.push({
+          taskId,
+          chatId: session.chatId,
+          userId,
+          lastKnownStatus: session.lastKnownStatus,
+          lastKnownAgentState: session.lastKnownAgentState,
+          cardMessageId: session.cardMessageId,
+          lastPrompt: session.lastPrompt,
+        });
       }
     }
     return result;
   }
 
-  setPendingAppend(chatId: number, taskId: string): void {
-    this.pendingAppends.set(chatId, { taskId });
+  setCardMessageId(taskId: string, userId: number, messageId: number): void {
+    const session = this.users.get(userId)?.sessions.get(taskId);
+    if (session) {
+      session.cardMessageId = messageId;
+      this.save();
+    }
   }
 
-  getPendingAppend(chatId: number): PendingAppend | null {
-    return this.pendingAppends.get(chatId) ?? null;
+  getCardMessageId(taskId: string, userId: number): number | undefined {
+    return this.users.get(userId)?.sessions.get(taskId)?.cardMessageId;
   }
 
-  clearPendingAppend(chatId: number): void {
-    this.pendingAppends.delete(chatId);
+  setLastPrompt(taskId: string, userId: number, prompt: string): void {
+    const session = this.users.get(userId)?.sessions.get(taskId);
+    if (session) {
+      session.lastPrompt = prompt;
+      this.save();
+    }
+  }
+
+  findByCardMessageId(chatId: number, userId: number, messageId: number): { taskId: string } | null {
+    const user = this.users.get(userId);
+    if (!user) return null;
+    for (const [taskId, session] of user.sessions) {
+      if (session.chatId === chatId && session.cardMessageId === messageId) {
+        return { taskId };
+      }
+    }
+    return null;
   }
 }
 

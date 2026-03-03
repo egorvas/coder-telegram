@@ -1,7 +1,8 @@
 import type { Telegraf } from 'telegraf';
 import { getCoderClient } from '../bot.js';
 import { taskSessions } from '../store/task-sessions.js';
-import { notifyTaskComplete } from './task-completion.js';
+import { sendCard, updateCard } from '../ui/task-card.js';
+import { buildStatusSnippet } from '../utils/log-parser.js';
 import { log } from '../utils/logger.js';
 import { CoderAuthError } from '../utils/coder-error.js';
 import { userStore } from '../store/user-store.js';
@@ -22,7 +23,7 @@ async function poll(bot: Telegraf): Promise<void> {
   let stateChanges = 0;
   const usersSeen = new Set<number>();
 
-  for (const { taskId, chatId, userId, lastKnownStatus, lastKnownAgentState } of sessions) {
+  for (const { taskId, chatId, userId, lastKnownStatus, lastKnownAgentState, cardMessageId, lastPrompt } of sessions) {
     const client = getCoderClient(userId);
     if (!client) continue;
 
@@ -32,25 +33,74 @@ async function poll(bot: Telegraf): Promise<void> {
       const task = await client.getTask(taskId);
       const status = task.status;
       const agentState = task.current_state?.state;
+      const agentMessage = task.current_state?.message;
       tasksChecked++;
 
-      if (status !== lastKnownStatus) {
+      const statusChanged = status !== lastKnownStatus;
+      const agentStateChanged = agentState !== undefined && agentState !== lastKnownAgentState;
+
+      if (statusChanged) {
         stateChanges++;
         log.info('task status change', { taskId, from: lastKnownStatus, to: status, userId });
       }
 
-      if (agentState !== undefined && agentState !== lastKnownAgentState) {
+      if (agentStateChanged) {
         stateChanges++;
         log.info('task agent state change', { taskId, from: lastKnownAgentState, to: agentState, userId });
-        // Only notify when AI finishes (idle) and task is active (not still initializing)
-        if (agentState === 'idle' && status === 'active') {
-          await notifyTaskComplete(taskId, chatId, userId, bot, agentState);
+      }
+
+      // Update card if state changed
+      if (cardMessageId && (statusChanged || agentStateChanged)) {
+        let snippet: string | undefined;
+
+        // Fetch logs only when agent finishes or task reaches terminal state
+        if (agentState === 'idle' || ['stopped', 'error', 'unknown'].includes(status)) {
+          try {
+            const logs = await client.getTaskLogs(taskId);
+            snippet = buildStatusSnippet(agentMessage, logs);
+          } catch {
+            snippet = agentMessage;
+          }
+        } else {
+          snippet = agentMessage;
+        }
+
+        const success = await updateCard(bot, chatId, cardMessageId, task, {
+          lastPrompt,
+          statusSnippet: snippet,
+        });
+
+        if (!success) {
+          // Card was deleted by user — send a new one
+          const newMsgId = await sendCard(bot, chatId, task, {
+            lastPrompt,
+            statusSnippet: snippet,
+          });
+          taskSessions.setCardMessageId(taskId, userId, newMsgId);
         }
       }
 
+      // Send completion ping when AI finishes
+      if (agentState === 'idle' && lastKnownAgentState === 'working' && status === 'active') {
+        const name = task.display_name || task.name;
+        try {
+          await bot.telegram.sendMessage(
+            chatId,
+            `✅ *${name}* — done`,
+            { parse_mode: 'Markdown' }
+          );
+        } catch (err) {
+          log.warn('completion ping failed', { taskId, err: String(err) });
+        }
+      }
+
+      // Terminal status notification (if no card existed)
       const terminalStatuses = ['stopped', 'error', 'unknown'];
       if (terminalStatuses.includes(status) && !terminalStatuses.includes(lastKnownStatus ?? '')) {
-        await notifyTaskComplete(taskId, chatId, userId, bot, status);
+        if (!cardMessageId) {
+          const msgId = await sendCard(bot, chatId, task);
+          taskSessions.setCardMessageId(taskId, userId, msgId);
+        }
       }
 
       taskSessions.updateStatus(taskId, userId, status, agentState);

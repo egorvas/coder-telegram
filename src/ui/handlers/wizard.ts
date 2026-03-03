@@ -1,5 +1,5 @@
 import type { Telegraf, Context } from 'telegraf';
-import { getCoderClient } from '../../bot.js';
+import { bot, getCoderClient } from '../../bot.js';
 import { uiState, type WizardState } from '../state.js';
 import { taskSessions } from '../../store/task-sessions.js';
 import {
@@ -8,6 +8,7 @@ import {
   promptKeyboard,
   mainMenuKeyboard,
 } from '../keyboards.js';
+import { sendCard } from '../task-card.js';
 import { showWorkspaceList } from './workspace-menu.js';
 import { config } from '../../config.js';
 import { handleCoderError } from '../../utils/coder-error.js';
@@ -81,15 +82,14 @@ async function createFromWizard(ctx: Context, wizard: WizardState, prompt: strin
     }
   } else {
     try {
-      await ctx.reply(`Creating task from *${templateName ?? 'template'}*...`, { parse_mode: 'Markdown' });
+      await ctx.reply(`Creating task from *${templateName ?? 'template'}*…`, { parse_mode: 'Markdown' });
       const task = await client.createTask(templateVersionId, presetId ?? null, prompt);
       const userId = ctx.from?.id ?? chatId;
       log.info('task created', { taskId: task.id, template: templateName, preset: presetName, userId });
       taskSessions.register(task.id, chatId, userId);
-      await ctx.reply(
-        `Task created!\nID: \`${task.id}\`\nStatus: ${task.status}${presetName ? `\nPreset: ${presetName}` : ''}`,
-        { parse_mode: 'Markdown' }
-      );
+      const messageId = await sendCard(bot, chatId, task);
+      taskSessions.setCardMessageId(task.id, userId, messageId);
+      taskSessions.updateStatus(task.id, userId, task.status, task.current_state?.state);
     } catch (err) {
       await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }

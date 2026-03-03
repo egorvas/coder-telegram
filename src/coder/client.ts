@@ -154,10 +154,18 @@ export class CoderClient {
   }
 
   async appendTaskPrompt(taskId: string, prompt: string): Promise<void> {
-    await this.request(`/api/v2/tasks/me/${taskId}/send`, {
-      method: 'POST',
-      body: toAsciiJson({ input: prompt }),
-    });
+    try {
+      await this.request(`/api/v2/tasks/me/${taskId}/send`, {
+        method: 'POST',
+        body: toAsciiJson({ input: prompt }),
+      });
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('screen to stabilize')) {
+        log.warn('append delivered, screen stabilize timed out', { taskId });
+        return;
+      }
+      throw err;
+    }
   }
 
   async deleteTask(taskId: string): Promise<void> {

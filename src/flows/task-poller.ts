@@ -1,8 +1,8 @@
 import type { Telegraf } from 'telegraf';
 import { getCoderClient } from '../bot.js';
 import { taskSessions } from '../store/task-sessions.js';
-import { sendCard, updateCard } from '../ui/task-card.js';
-import { buildStatusSnippet } from '../utils/log-parser.js';
+import { sendCard, updateCard, sendLogMessage } from '../ui/task-card.js';
+import { buildStatusSnippet, extractLastResponse } from '../utils/log-parser.js';
 import { log } from '../utils/logger.js';
 import { CoderAuthError } from '../utils/coder-error.js';
 import { userStore } from '../store/user-store.js';
@@ -80,23 +80,22 @@ async function poll(bot: Telegraf): Promise<void> {
         }
       }
 
-      // Send completion ping when AI finishes
-      if (agentState === 'idle' && lastKnownAgentState === 'working' && status === 'active') {
-        const name = task.display_name || task.name;
-        try {
-          await bot.telegram.sendMessage(
-            chatId,
-            `✅ *${name}* — done`,
-            { parse_mode: 'Markdown' }
-          );
-        } catch (err) {
-          log.warn('completion ping failed', { taskId, err: String(err) });
-        }
-      }
-
-      // Terminal status notification (if no card existed)
+      // Send log message when AI finishes or task hits terminal state
+      const aiFinished = agentState === 'idle' && lastKnownAgentState === 'working' && status === 'active';
       const terminalStatuses = ['stopped', 'error', 'unknown'];
-      if (terminalStatuses.includes(status) && !terminalStatuses.includes(lastKnownStatus ?? '')) {
+      const hitTerminal = terminalStatuses.includes(status) && !terminalStatuses.includes(lastKnownStatus ?? '');
+
+      if (aiFinished || hitTerminal) {
+        try {
+          const logs = await client.getTaskLogs(taskId);
+          const cleaned = extractLastResponse(logs, 3500);
+          const logMsgId = await sendLogMessage(bot, chatId, task, cleaned);
+          taskSessions.setLogMessageId(taskId, userId, logMsgId);
+        } catch (err) {
+          log.warn('completion log message failed', { taskId, err: String(err) });
+        }
+
+        // Create card if one didn't exist (legacy sessions)
         if (!cardMessageId) {
           const msgId = await sendCard(bot, chatId, task);
           taskSessions.setCardMessageId(taskId, userId, msgId);

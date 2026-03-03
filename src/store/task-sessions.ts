@@ -6,6 +6,7 @@ import { log } from '../utils/logger.js';
 interface TaskSession {
   chatId: number;
   cardMessageId?: number;
+  logMessageId?: number;
   lastKnownStatus?: string;
   lastKnownAgentState?: string;
   lastPrompt?: string;
@@ -104,8 +105,8 @@ class TaskSessionStore {
     return this.users.get(userId)?.sessions.get(taskId)?.lastKnownAgentState;
   }
 
-  getAllSessions(): Array<{ taskId: string; chatId: number; userId: number; lastKnownStatus?: string; lastKnownAgentState?: string; cardMessageId?: number; lastPrompt?: string }> {
-    const result: Array<{ taskId: string; chatId: number; userId: number; lastKnownStatus?: string; lastKnownAgentState?: string; cardMessageId?: number; lastPrompt?: string }> = [];
+  getAllSessions(): Array<{ taskId: string; chatId: number; userId: number; lastKnownStatus?: string; lastKnownAgentState?: string; cardMessageId?: number; logMessageId?: number; lastPrompt?: string }> {
+    const result: Array<{ taskId: string; chatId: number; userId: number; lastKnownStatus?: string; lastKnownAgentState?: string; cardMessageId?: number; logMessageId?: number; lastPrompt?: string }> = [];
     for (const [userId, { sessions }] of this.users) {
       for (const [taskId, session] of sessions) {
         result.push({
@@ -115,6 +116,7 @@ class TaskSessionStore {
           lastKnownStatus: session.lastKnownStatus,
           lastKnownAgentState: session.lastKnownAgentState,
           cardMessageId: session.cardMessageId,
+          logMessageId: session.logMessageId,
           lastPrompt: session.lastPrompt,
         });
       }
@@ -142,11 +144,19 @@ class TaskSessionStore {
     }
   }
 
-  findByCardMessageId(chatId: number, userId: number, messageId: number): { taskId: string } | null {
+  setLogMessageId(taskId: string, userId: number, messageId: number): void {
+    const session = this.users.get(userId)?.sessions.get(taskId);
+    if (session) {
+      session.logMessageId = messageId;
+      this.save();
+    }
+  }
+
+  findByReplyMessageId(chatId: number, userId: number, messageId: number): { taskId: string } | null {
     const user = this.users.get(userId);
     if (!user) return null;
     for (const [taskId, session] of user.sessions) {
-      if (session.chatId === chatId && session.cardMessageId === messageId) {
+      if (session.chatId === chatId && (session.cardMessageId === messageId || session.logMessageId === messageId)) {
         return { taskId };
       }
     }

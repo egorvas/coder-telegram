@@ -142,10 +142,10 @@ bot.on('text', async (ctx) => {
     return;
   }
 
-  // Priority 2: reply to a task card → append prompt
+  // Priority 2: reply to a task card or log message → append prompt
   if (ctx.message.reply_to_message) {
     const repliedMsgId = ctx.message.reply_to_message.message_id;
-    const session = taskSessions.findByCardMessageId(chatId, userId, repliedMsgId);
+    const session = taskSessions.findByReplyMessageId(chatId, userId, repliedMsgId);
     if (session) {
       const client = getCoderClient(userId);
       if (!client) {
@@ -158,9 +158,12 @@ bot.on('text', async (ctx) => {
         taskSessions.setLastPrompt(session.taskId, userId, text);
         // Update the card to reflect the new prompt
         const task = await client.getTask(session.taskId);
-        await updateCard(bot, chatId, repliedMsgId, task, {
-          lastPrompt: text,
-        });
+        const cardMsgId = taskSessions.getCardMessageId(session.taskId, userId);
+        if (cardMsgId) {
+          await updateCard(bot, chatId, cardMsgId, task, {
+            lastPrompt: text,
+          });
+        }
       } catch (err) {
         await handleCoderError(ctx, err, userId);
       }

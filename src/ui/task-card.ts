@@ -110,6 +110,44 @@ export async function sendCard(
 }
 
 /**
+ * Send a log message with the AI's response. User can reply to it to continue.
+ * Returns the message_id.
+ */
+export async function sendLogMessage(
+  bot: Telegraf,
+  chatId: number,
+  task: CoderTask,
+  cleanedLogs: string
+): Promise<number> {
+  const name = task.display_name || task.name;
+  const emoji = statusEmoji(task.status, task.current_state?.state);
+  const label = statusLabel(task.status, task.current_state?.state);
+  const keyboard = taskCardKeyboard(task.id, task.current_state?.state);
+
+  const header = `${emoji} *${name}* — ${label}`;
+  const footer = '\n\n_Reply to this message to continue_';
+  const headerLen = header.length + footer.length + 4; // +4 for \n\n
+
+  if (!cleanedLogs) {
+    const msg = await bot.telegram.sendMessage(chatId, `${header}\n\n_No logs yet._${footer}`, {
+      parse_mode: 'Markdown',
+      ...keyboard,
+    });
+    return msg.message_id;
+  }
+
+  const { text: fitted, wasTruncated } = fitLogs(cleanedLogs, headerLen);
+  const truncNote = wasTruncated ? '\n_(truncated — showing last portion)_' : '';
+  const fullText = `${header}\n\n\`\`\`\n${fitted}\n\`\`\`${truncNote}${footer}`;
+
+  const msg = await bot.telegram.sendMessage(chatId, fullText, {
+    parse_mode: 'Markdown',
+    ...keyboard,
+  });
+  return msg.message_id;
+}
+
+/**
  * Update an existing card message in-place.
  * Returns true if successful, false if the message was deleted by the user.
  */

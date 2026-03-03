@@ -10,19 +10,18 @@ export function stripAnsi(text: string): string {
 
 // Claude Code UI markers
 const ASSISTANT_MARKER = /^●\s*/;        // ● = start of assistant response
-const SEPARATOR_RE = /^─{3,}$/;          // ─── = section separator
+const SEPARATOR_RE = /^[─━]{3,}$|^[╌]{3,}$/; // ─── or ━━━ or ╌╌╌ = separators
 const USER_PROMPT_RE = /^❯\s/;           // ❯ = user input
 const SYSTEM_RE = /^✻\s/;               // ✻ = system event (compacted, crunched)
 const PERMISSION_RE = /^⏵/;             // ⏵⏵ bypass permissions
-const TOOL_OUTPUT_RE = /^\s*⎿\s*/;       // ⎿ = tool output (indented)
+
+// Threshold: if ● block is shorter than this, it's likely trivial (e.g. "Updated plan")
+const TRIVIAL_THRESHOLD = 100;
 
 /**
- * Returns true if the line is Claude Code UI chrome (not part of the AI response).
+ * Returns true if the line is a hard UI boundary (user input, system event, permissions).
  */
-function isUiNoise(line: string): boolean {
-  const trimmed = line.trim();
-  if (trimmed.length === 0) return false; // blank lines may be part of response
-  if (SEPARATOR_RE.test(trimmed)) return true;
+function isHardBoundary(trimmed: string): boolean {
   if (USER_PROMPT_RE.test(trimmed)) return true;
   if (SYSTEM_RE.test(trimmed)) return true;
   if (PERMISSION_RE.test(trimmed)) return true;
@@ -30,33 +29,18 @@ function isUiNoise(line: string): boolean {
 }
 
 /**
- * Extract the last assistant response (● block) from Claude Code logs.
- *
- * Looks for the last line starting with ● and collects everything
- * until the next separator (───, ❯, ✻, ⏵⏵) or end of input.
- * Tool output lines (⎿) within the response are included.
+ * Returns true if the line is a separator (───, ━━━, ╌╌╌).
  */
-export function extractLastResponse(rawLogs: string, maxChars = 3500): string {
-  if (!rawLogs) return '';
+function isSeparator(trimmed: string): boolean {
+  return SEPARATOR_RE.test(trimmed);
+}
 
-  const clean = stripAnsi(rawLogs);
-  const lines = clean.split('\n');
-
-  // Find the last ● marker
-  let startIdx = -1;
-  for (let i = lines.length - 1; i >= 0; i--) {
-    if (ASSISTANT_MARKER.test(lines[i].trim())) {
-      startIdx = i;
-      break;
-    }
-  }
-
-  if (startIdx === -1) {
-    // No ● found — fall back to last non-noise block
-    return extractFallback(lines, maxChars);
-  }
-
-  // Collect from ● to the next UI separator/marker
+/**
+ * Collect lines from startIdx forward, stopping at hard boundaries.
+ * Separators are skipped (not included) but don't stop collection —
+ * only hard boundaries (❯, ✻, ⏵⏵) stop it.
+ */
+function collectBlock(lines: string[], startIdx: number, maxChars: number, stripMarker: boolean): string {
   const result: string[] = [];
   let totalChars = 0;
 
@@ -64,11 +48,16 @@ export function extractLastResponse(rawLogs: string, maxChars = 3500): string {
     const line = lines[i];
     const trimmed = line.trim();
 
-    // Stop at UI noise boundaries (but not at the ● line itself)
-    if (i > startIdx && isUiNoise(trimmed)) break;
+    // Hard boundaries always stop collection
+    if (i > startIdx && isHardBoundary(trimmed)) break;
 
-    // Strip the ● marker from the first line
-    const output = i === startIdx ? trimmed.replace(ASSISTANT_MARKER, '').trim() : line;
+    // Skip separators but keep going
+    if (isSeparator(trimmed)) continue;
+
+    // Strip ● marker from the first line if requested
+    const output = (i === startIdx && stripMarker)
+      ? trimmed.replace(ASSISTANT_MARKER, '').trim()
+      : line;
 
     const lineLen = output.length + 1;
     if (totalChars + lineLen > maxChars) break;
@@ -81,7 +70,60 @@ export function extractLastResponse(rawLogs: string, maxChars = 3500): string {
 }
 
 /**
- * Fallback: extract last contiguous non-noise block.
+ * Extract the last assistant response from Claude Code logs.
+ *
+ * Strategy:
+ * 1. Find the last ● marker, collect everything until ❯/✻/⏵⏵
+ *    (separators like ─── and ╌╌╌ are skipped, not treated as stop points)
+ * 2. If the ● block is trivially short (e.g. "Updated plan"),
+ *    it means the real content follows after — like a plan view.
+ *    In that case, collect the content that follows the ● block too.
+ * 3. If still short, try the previous ● block.
+ * 4. Fallback: last non-noise block.
+ */
+export function extractLastResponse(rawLogs: string, maxChars = 3500): string {
+  if (!rawLogs) return '';
+
+  const clean = stripAnsi(rawLogs);
+  const lines = clean.split('\n');
+
+  // Find all ● marker positions
+  const markers: number[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (ASSISTANT_MARKER.test(lines[i].trim())) {
+      markers.push(i);
+    }
+  }
+
+  if (markers.length === 0) {
+    return extractFallback(lines, maxChars);
+  }
+
+  // Try last ● block — collect everything until hard boundary,
+  // skipping separators (so plan content after ─── is included)
+  const lastIdx = markers[markers.length - 1];
+  const block = collectBlock(lines, lastIdx, maxChars, true);
+
+  if (block.length >= TRIVIAL_THRESHOLD) {
+    return block;
+  }
+
+  // Block was trivially short — try previous ● block
+  if (markers.length > 1) {
+    const prevIdx = markers[markers.length - 2];
+    const prevBlock = collectBlock(lines, prevIdx, maxChars, true);
+    if (prevBlock.length > block.length) {
+      return prevBlock;
+    }
+  }
+
+  // Still short — fallback
+  if (block.length > 0) return block;
+  return extractFallback(lines, maxChars);
+}
+
+/**
+ * Fallback: extract last contiguous non-noise block (reverse scan).
  */
 function extractFallback(lines: string[], maxChars: number): string {
   const result: string[] = [];
@@ -92,7 +134,7 @@ function extractFallback(lines: string[], maxChars: number): string {
     const line = lines[i];
     const trimmed = line.trim();
 
-    if (isUiNoise(trimmed)) {
+    if (isHardBoundary(trimmed) || isSeparator(trimmed)) {
       if (foundContent) break;
       continue;
     }
@@ -104,7 +146,6 @@ function extractFallback(lines: string[], maxChars: number): string {
       result.unshift(line);
       totalChars += lineLen;
     } else if (foundContent) {
-      // Include blank lines within the block
       result.unshift('');
       totalChars += 1;
     }

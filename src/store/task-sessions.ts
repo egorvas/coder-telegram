@@ -10,6 +10,7 @@ interface TaskSession {
   lastKnownStatus?: string;
   lastKnownAgentState?: string;
   lastPrompt?: string;
+  workingStartedAt?: number;
 }
 
 interface UserData {
@@ -95,10 +96,18 @@ class TaskSessionStore {
   updateStatus(taskId: string, userId: number, status: string, agentState?: string): void {
     const session = this.users.get(userId)?.sessions.get(taskId);
     if (session) {
+      // Track when agent starts working
+      if (agentState === 'working' && session.lastKnownAgentState !== 'working') {
+        session.workingStartedAt = Date.now();
+      }
       session.lastKnownStatus = status;
       if (agentState !== undefined) session.lastKnownAgentState = agentState;
       this.save();
     }
+  }
+
+  getWorkingStartedAt(taskId: string, userId: number): number | undefined {
+    return this.users.get(userId)?.sessions.get(taskId)?.workingStartedAt;
   }
 
   getAgentState(taskId: string, userId: number): string | undefined {

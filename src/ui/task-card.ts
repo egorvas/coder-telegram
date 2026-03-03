@@ -109,6 +109,17 @@ export async function sendCard(
   return msg.message_id;
 }
 
+function formatDuration(ms: number): string {
+  const totalSec = Math.round(ms / 1000);
+  if (totalSec < 60) return `${totalSec}s`;
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  if (min < 60) return sec > 0 ? `${min}m ${sec}s` : `${min}m`;
+  const hr = Math.floor(min / 60);
+  const remMin = min % 60;
+  return remMin > 0 ? `${hr}h ${remMin}m` : `${hr}h`;
+}
+
 /**
  * Send a log message with the AI's response. User can reply to it to continue.
  * Returns the message_id.
@@ -117,14 +128,16 @@ export async function sendLogMessage(
   bot: Telegraf,
   chatId: number,
   task: CoderTask,
-  cleanedLogs: string
+  cleanedLogs: string,
+  durationMs?: number
 ): Promise<number> {
   const name = task.display_name || task.name;
   const emoji = statusEmoji(task.status, task.current_state?.state);
   const label = statusLabel(task.status, task.current_state?.state);
   const keyboard = taskCardKeyboard(task.id, task.current_state?.state);
 
-  const header = `${emoji} *${name}* — ${label}`;
+  const durationStr = durationMs ? ` (${formatDuration(durationMs)})` : '';
+  const header = `${emoji} *${name}* — ${label}${durationStr}`;
   const footer = '\n\n_Reply to this message to continue_';
   const headerLen = header.length + footer.length + 4; // +4 for \n\n
 

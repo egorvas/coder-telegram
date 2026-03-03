@@ -89,7 +89,10 @@ async function poll(bot: Telegraf): Promise<void> {
         try {
           const logs = await client.getTaskLogs(taskId);
           const cleaned = extractLastResponse(logs, 3500);
-          const logMsgId = await sendLogMessage(bot, chatId, task, cleaned);
+          // Calculate working duration
+          const startedAt = taskSessions.getWorkingStartedAt(taskId, userId);
+          const durationMs = startedAt ? Date.now() - startedAt : undefined;
+          const logMsgId = await sendLogMessage(bot, chatId, task, cleaned, durationMs);
           taskSessions.setLogMessageId(taskId, userId, logMsgId);
         } catch (err) {
           log.warn('completion log message failed', { taskId, err: String(err) });

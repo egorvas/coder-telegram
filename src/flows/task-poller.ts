@@ -88,7 +88,7 @@ async function poll(bot: Telegraf): Promise<void> {
       if (aiFinished || hitTerminal) {
         try {
           const logs = await client.getTaskLogs(taskId);
-          const cleaned = extractLastResponse(logs, 3500);
+          const cleaned = extractLastResponse(logs);
           // Calculate working duration
           const startedAt = taskSessions.getWorkingStartedAt(taskId, userId);
           const durationMs = startedAt ? Date.now() - startedAt : undefined;

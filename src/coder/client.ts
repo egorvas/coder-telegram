@@ -150,7 +150,7 @@ export class CoderClient {
   async getTaskLogs(taskId: string): Promise<string> {
     const data = await this.request<{ logs: Array<{ content: string }> }>(`/api/v2/tasks/me/${taskId}/logs`);
     const lines = (data.logs ?? []).map((l) => l.content);
-    return lines.slice(-50).join('\n');
+    return lines.join('\n');
   }
 
   async appendTaskPrompt(taskId: string, prompt: string): Promise<void> {

@@ -40,9 +40,8 @@ function isSeparator(trimmed: string): boolean {
  * Separators are skipped (not included) but don't stop collection —
  * only hard boundaries (❯, ✻, ⏵⏵) stop it.
  */
-function collectBlock(lines: string[], startIdx: number, maxChars: number, stripMarker: boolean): string {
+function collectBlock(lines: string[], startIdx: number, stripMarker: boolean): string {
   const result: string[] = [];
-  let totalChars = 0;
 
   for (let i = startIdx; i < lines.length; i++) {
     const line = lines[i];
@@ -59,11 +58,7 @@ function collectBlock(lines: string[], startIdx: number, maxChars: number, strip
       ? trimmed.replace(ASSISTANT_MARKER, '').trim()
       : line;
 
-    const lineLen = output.length + 1;
-    if (totalChars + lineLen > maxChars) break;
-
     result.push(output);
-    totalChars += lineLen;
   }
 
   return result.join('\n').trim();
@@ -81,7 +76,7 @@ function collectBlock(lines: string[], startIdx: number, maxChars: number, strip
  * 3. If still short, try the previous ● block.
  * 4. Fallback: last non-noise block.
  */
-export function extractLastResponse(rawLogs: string, maxChars = 3500): string {
+export function extractLastResponse(rawLogs: string): string {
   if (!rawLogs) return '';
 
   const clean = stripAnsi(rawLogs);
@@ -96,13 +91,13 @@ export function extractLastResponse(rawLogs: string, maxChars = 3500): string {
   }
 
   if (markers.length === 0) {
-    return extractFallback(lines, maxChars);
+    return extractFallback(lines);
   }
 
   // Try last ● block — collect everything until hard boundary,
   // skipping separators (so plan content after ─── is included)
   const lastIdx = markers[markers.length - 1];
-  const block = collectBlock(lines, lastIdx, maxChars, true);
+  const block = collectBlock(lines, lastIdx, true);
 
   if (block.length >= TRIVIAL_THRESHOLD) {
     return block;
@@ -111,7 +106,7 @@ export function extractLastResponse(rawLogs: string, maxChars = 3500): string {
   // Block was trivially short — try previous ● block
   if (markers.length > 1) {
     const prevIdx = markers[markers.length - 2];
-    const prevBlock = collectBlock(lines, prevIdx, maxChars, true);
+    const prevBlock = collectBlock(lines, prevIdx, true);
     if (prevBlock.length > block.length) {
       return prevBlock;
     }
@@ -119,15 +114,14 @@ export function extractLastResponse(rawLogs: string, maxChars = 3500): string {
 
   // Still short — fallback
   if (block.length > 0) return block;
-  return extractFallback(lines, maxChars);
+  return extractFallback(lines);
 }
 
 /**
  * Fallback: extract last contiguous non-noise block (reverse scan).
  */
-function extractFallback(lines: string[], maxChars: number): string {
+function extractFallback(lines: string[]): string {
   const result: string[] = [];
-  let totalChars = 0;
   let foundContent = false;
 
   for (let i = lines.length - 1; i >= 0; i--) {
@@ -141,13 +135,9 @@ function extractFallback(lines: string[], maxChars: number): string {
 
     if (trimmed.length > 0) {
       foundContent = true;
-      const lineLen = line.length + 1;
-      if (totalChars + lineLen > maxChars) break;
       result.unshift(line);
-      totalChars += lineLen;
     } else if (foundContent) {
       result.unshift('');
-      totalChars += 1;
     }
   }
 
@@ -170,7 +160,14 @@ export function buildStatusSnippet(
   }
 
   if (rawLogs) {
-    return extractLastResponse(rawLogs, maxChars);
+    const full = extractLastResponse(rawLogs);
+    if (full.length > maxChars) {
+      // Truncate from the top, keep the end
+      const cut = full.slice(-maxChars);
+      const nl = cut.indexOf('\n');
+      return nl > 0 ? '…\n' + cut.slice(nl + 1) : cut;
+    }
+    return full;
   }
 
   return '';

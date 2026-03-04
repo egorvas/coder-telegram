@@ -73,7 +73,6 @@ export function taskCardKeyboard(taskId: string, agentState?: string) {
     Markup.button.callback('🗑 Delete', `task:delete:${taskId}`),
     Markup.button.url('🌐 Open', `${config.coderApiUrl}/tasks/me/${taskId}`),
   ]);
-  rows.push([Markup.button.callback('« Tasks', 'dashboard:back')]);
   return Markup.inlineKeyboard(rows);
 }
 

@@ -7,7 +7,9 @@ import { uiState } from '../state.js';
 import { userStore } from '../../store/user-store.js';
 import type { CoderTask } from '../../coder/types.js';
 import { startWizard } from './wizard.js';
-import { sendCard, updateCard } from '../task-card.js';
+import { sendCard, sendLogMessage, updateCard } from '../task-card.js';
+import { extractLastResponse } from '../../utils/log-parser.js';
+import { buildLogMessage } from '../../utils/telegram.js';
 import { log } from '../../utils/logger.js';
 import { handleCoderError, CoderAuthError } from '../../utils/coder-error.js';
 
@@ -129,7 +131,7 @@ export function registerTaskDashboardHandlers(botInstance: Telegraf): void {
     await showTaskDashboard(ctx);
   });
 
-  // task:select:<id> → send or update live card
+  // task:select:<id> → show log (truncated if active, formatted if completed)
   botInstance.action(/^task:select:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
     const userId = ctx.from?.id ?? 0;
@@ -139,19 +141,26 @@ export function registerTaskDashboardHandlers(botInstance: Telegraf): void {
     const client = clientOrReply(ctx);
     if (!client) return;
     try {
-      const task = await client.getTask(taskId);
-      const session = taskSessions.get(taskId, userId);
+      const [task, logs] = await Promise.all([
+        client.getTask(taskId),
+        client.getTaskLogs(taskId),
+      ]);
+      const agentState = task.current_state?.state;
 
-      // Delete old card if it exists, then create a fresh one at the bottom
-      if (session?.cardMessageId) {
-        try {
-          await bot.telegram.deleteMessage(chatId, session.cardMessageId);
-        } catch { /* already gone */ }
+      if (agentState === 'idle' || ['stopped', 'error', 'unknown'].includes(task.status)) {
+        // Finished — send formatted log message
+        const cleaned = extractLastResponse(logs);
+        const logMsgId = await sendLogMessage(bot, chatId, task, cleaned);
+        taskSessions.register(task.id, chatId, userId);
+        taskSessions.setLogMessageId(taskId, userId, logMsgId);
+      } else {
+        // Active — send truncated raw log
+        const keyboard = taskCardKeyboard(taskId, agentState);
+        await ctx.reply(
+          buildLogMessage(taskId, task.status, logs),
+          { parse_mode: 'Markdown', ...keyboard }
+        );
       }
-      const msgId = await sendCard(bot, chatId, task, {
-        lastPrompt: session?.lastPrompt,
-      });
-      taskSessions.setCardMessageId(taskId, userId, msgId);
     } catch (err) {
       await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }

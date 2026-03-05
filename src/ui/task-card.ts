@@ -123,6 +123,7 @@ export async function sendLogMessage(
   chatId: number,
   task: CoderTask,
   cleanedLogs: string,
+  lastPrompt?: string,
   durationMs?: number
 ): Promise<number> {
   const name = task.display_name || task.name;
@@ -131,7 +132,14 @@ export async function sendLogMessage(
   const keyboard = logMessageKeyboard(task.id);
 
   const durationStr = durationMs ? ` (${formatDuration(durationMs)})` : '';
-  const header = `${emoji} *${name}* — ${label}${durationStr}`;
+  let header = `${emoji} *${name}* — ${label}${durationStr}`;
+
+  if (lastPrompt) {
+    const trimmed = lastPrompt.slice(0, 200);
+    const ellipsis = lastPrompt.length > 200 ? '…' : '';
+    header += `\n\n> ${trimmed}${ellipsis}`;
+  }
+
   const headerLen = header.length + 4; // +4 for \n\n
 
   if (!cleanedLogs) {

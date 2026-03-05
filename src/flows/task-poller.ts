@@ -71,17 +71,7 @@ async function doPoll(bot: Telegraf): Promise<void> {
       if (cardMessageId && (statusChanged || agentStateChanged)) {
         let snippet: string | undefined;
 
-        // Fetch logs only when agent finishes or task reaches terminal state
-        if (agentState === 'idle' || ['stopped', 'error', 'unknown'].includes(status)) {
-          try {
-            const logs = await client.getTaskLogs(taskId);
-            snippet = extractLastResponse(logs) || agentMessage;
-          } catch {
-            snippet = agentMessage;
-          }
-        } else {
-          snippet = agentMessage;
-        }
+        snippet = agentMessage;
 
         const success = await updateCard(bot, chatId, cardMessageId, task, {
           lastPrompt,
@@ -105,16 +95,20 @@ async function doPoll(bot: Telegraf): Promise<void> {
       const hitTerminal = terminalStatuses.includes(status) && !terminalStatuses.includes(lastKnownStatus ?? '');
 
       if (aiFinished || firstSeenDone || hitTerminal) {
-        try {
-          const logs = await client.getTaskLogs(taskId);
-          const cleaned = extractLastResponse(logs);
-          // Calculate working duration
-          const startedAt = taskSessions.getWorkingStartedAt(taskId, userId);
-          const durationMs = startedAt ? Date.now() - startedAt : undefined;
-          const logMsgId = await sendLogMessage(bot, chatId, task, cleaned, durationMs);
-          taskSessions.setLogMessageId(taskId, userId, logMsgId);
-        } catch (err) {
-          log.warn('completion log message failed', { taskId, err: String(err) });
+        // Skip log message after /model command — agent just restarts
+        const isModelChange = lastPrompt?.startsWith('/model');
+        if (!isModelChange) {
+          try {
+            const logs = await client.getTaskLogs(taskId);
+            const cleaned = extractLastResponse(logs);
+            // Calculate working duration
+            const startedAt = taskSessions.getWorkingStartedAt(taskId, userId);
+            const durationMs = startedAt ? Date.now() - startedAt : undefined;
+            const logMsgId = await sendLogMessage(bot, chatId, task, cleaned, lastPrompt, durationMs);
+            taskSessions.setLogMessageId(taskId, userId, logMsgId);
+          } catch (err) {
+            log.warn('completion log message failed', { taskId, err: String(err) });
+          }
         }
 
         // Create card if one didn't exist (legacy sessions)

@@ -1,6 +1,6 @@
 import type { Telegraf } from 'telegraf';
 import type { CoderTask } from '../coder/types.js';
-import { taskCardKeyboard } from './keyboards.js';
+import { taskCardKeyboard, logMessageKeyboard } from './keyboards.js';
 import { sanitizeText, fitLogs } from '../utils/telegram.js';
 import { stripAnsi } from '../utils/log-parser.js';
 import { log } from '../utils/logger.js';
@@ -134,7 +134,7 @@ export async function sendLogMessage(
   const name = task.display_name || task.name;
   const emoji = statusEmoji(task.status, task.current_state?.state);
   const label = statusLabel(task.status, task.current_state?.state);
-  const keyboard = taskCardKeyboard(task.id, task.current_state?.state);
+  const keyboard = logMessageKeyboard(task.id);
 
   const durationStr = durationMs ? ` (${formatDuration(durationMs)})` : '';
   const header = `${emoji} *${name}* — ${label}${durationStr}`;

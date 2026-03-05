@@ -7,9 +7,8 @@ import { uiState } from '../state.js';
 import { userStore } from '../../store/user-store.js';
 import type { CoderTask } from '../../coder/types.js';
 import { startWizard } from './wizard.js';
-import { sendCard, sendLogMessage, updateCard } from '../task-card.js';
+import { sendCard, updateCard } from '../task-card.js';
 import { extractLastResponse } from '../../utils/log-parser.js';
-import { buildLogMessage } from '../../utils/telegram.js';
 import { log } from '../../utils/logger.js';
 import { handleCoderError, CoderAuthError } from '../../utils/coder-error.js';
 
@@ -131,7 +130,7 @@ export function registerTaskDashboardHandlers(botInstance: Telegraf): void {
     await showTaskDashboard(ctx);
   });
 
-  // task:select:<id> → show log (truncated if active, formatted if completed)
+  // task:select:<id> → re-create full card with log inside
   botInstance.action(/^task:select:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
     const userId = ctx.from?.id ?? 0;
@@ -145,22 +144,33 @@ export function registerTaskDashboardHandlers(botInstance: Telegraf): void {
         client.getTask(taskId),
         client.getTaskLogs(taskId),
       ]);
-      const agentState = task.current_state?.state;
 
-      if (agentState === 'idle' || ['stopped', 'error', 'unknown'].includes(task.status)) {
-        // Finished — send formatted log message
-        const cleaned = extractLastResponse(logs);
-        const logMsgId = await sendLogMessage(bot, chatId, task, cleaned);
-        taskSessions.register(task.id, chatId, userId);
-        taskSessions.setLogMessageId(taskId, userId, logMsgId);
-      } else {
-        // Active — send truncated raw log
-        const keyboard = taskCardKeyboard(taskId, agentState);
-        await ctx.reply(
-          buildLogMessage(taskId, task.status, logs),
-          { parse_mode: 'Markdown', ...keyboard }
-        );
+      // Build log snippet for card
+      const agentState = task.current_state?.state;
+      let snippet: string | undefined;
+      if (logs) {
+        if (agentState === 'idle' || ['stopped', 'error', 'unknown'].includes(task.status)) {
+          snippet = extractLastResponse(logs);
+        } else {
+          snippet = logs;
+        }
       }
+
+      const session = taskSessions.get(taskId, userId);
+      // Delete old card if exists
+      if (session?.cardMessageId) {
+        try {
+          await bot.telegram.deleteMessage(chatId, session.cardMessageId);
+        } catch { /* already gone */ }
+      }
+
+      taskSessions.register(task.id, chatId, userId);
+      const msgId = await sendCard(bot, chatId, task, {
+        lastPrompt: session?.lastPrompt,
+        statusSnippet: snippet,
+      });
+      taskSessions.setCardMessageId(task.id, userId, msgId);
+      taskSessions.updateStatus(task.id, userId, task.status, agentState);
     } catch (err) {
       await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }

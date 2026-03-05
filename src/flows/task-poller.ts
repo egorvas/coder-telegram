@@ -7,6 +7,8 @@ import { log } from '../utils/logger.js';
 import { CoderAuthError } from '../utils/coder-error.js';
 import { userStore } from '../store/user-store.js';
 
+let polling = false;
+
 export function startPoller(bot: Telegraf, intervalMs = 15_000): void {
   log.info('task poller started', { intervalMs });
 
@@ -16,6 +18,22 @@ export function startPoller(bot: Telegraf, intervalMs = 15_000): void {
 }
 
 async function poll(bot: Telegraf): Promise<void> {
+  if (polling) {
+    log.debug('poller skipped — previous cycle still running');
+    return;
+  }
+  polling = true;
+  try {
+    await doPoll(bot);
+  } finally {
+    polling = false;
+  }
+}
+
+async function doPoll(bot: Telegraf): Promise<void> {
+  // Auto-discover tasks created externally (e.g. via web UI)
+  await discoverNewTasks();
+
   const sessions = taskSessions.getAllSessions();
   if (sessions.length === 0) return;
 
@@ -82,10 +100,11 @@ async function poll(bot: Telegraf): Promise<void> {
 
       // Send log message when AI finishes or task hits terminal state
       const aiFinished = agentState === 'idle' && lastKnownAgentState === 'working' && status === 'active';
+      const firstSeenDone = agentState === 'idle' && lastKnownAgentState === undefined && status === 'active';
       const terminalStatuses = ['stopped', 'error', 'unknown'];
       const hitTerminal = terminalStatuses.includes(status) && !terminalStatuses.includes(lastKnownStatus ?? '');
 
-      if (aiFinished || hitTerminal) {
+      if (aiFinished || firstSeenDone || hitTerminal) {
         try {
           const logs = await client.getTaskLogs(taskId);
           const cleaned = extractLastResponse(logs);
@@ -123,4 +142,41 @@ async function poll(bot: Telegraf): Promise<void> {
   }
 
   log.debug('poller cycle', { usersPolled: usersSeen.size, tasksChecked, stateChanges });
+}
+
+/**
+ * Discover tasks created outside the bot (e.g. via web UI) and register them
+ * so the poller can track their status and send notifications.
+ */
+async function discoverNewTasks(): Promise<void> {
+  const usersWithKeys = userStore.listUsers().filter((u) => u.hasKey);
+
+  for (const { userId } of usersWithKeys) {
+    const client = getCoderClient(userId);
+    if (!client) continue;
+
+    try {
+      const tasks = await client.listTasks();
+      const terminalStatuses = ['stopped', 'error', 'unknown'];
+
+      for (const task of tasks) {
+        // Skip terminal tasks — no point tracking them
+        if (terminalStatuses.includes(task.status)) continue;
+        // Skip tasks already tracked
+        if (taskSessions.get(task.id, userId)) continue;
+
+        // Register new task — chatId = userId for DMs
+        log.info('auto-discovered task', { taskId: task.id, userId, status: task.status });
+        taskSessions.register(task.id, userId, userId);
+        taskSessions.updateStatus(task.id, userId, task.status, task.current_state?.state);
+      }
+    } catch (err) {
+      if (err instanceof CoderAuthError) {
+        log.warn('coder auth expired during discovery, clearing key', { userId });
+        userStore.clearApiKey(userId);
+      } else {
+        log.debug('task discovery failed', { userId, err: String(err) });
+      }
+    }
+  }
 }

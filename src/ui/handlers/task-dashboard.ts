@@ -8,7 +8,6 @@ import { userStore } from '../../store/user-store.js';
 import type { CoderTask } from '../../coder/types.js';
 import { startWizard } from './wizard.js';
 import { sendCard, updateCard } from '../task-card.js';
-import { extractLastResponse } from '../../utils/log-parser.js';
 import { log } from '../../utils/logger.js';
 import { handleCoderError, CoderAuthError } from '../../utils/coder-error.js';
 
@@ -140,21 +139,9 @@ export function registerTaskDashboardHandlers(botInstance: Telegraf): void {
     const client = clientOrReply(ctx);
     if (!client) return;
     try {
-      const [task, logs] = await Promise.all([
-        client.getTask(taskId),
-        client.getTaskLogs(taskId),
-      ]);
-
-      // Build log snippet for card
+      const task = await client.getTask(taskId);
       const agentState = task.current_state?.state;
-      let snippet: string | undefined;
-      if (logs) {
-        if (agentState === 'idle' || ['stopped', 'error', 'unknown'].includes(task.status)) {
-          snippet = extractLastResponse(logs);
-        } else {
-          snippet = logs;
-        }
-      }
+      const snippet = task.current_state?.message;
 
       const session = taskSessions.get(taskId, userId);
       // Delete old card if exists
@@ -165,9 +152,11 @@ export function registerTaskDashboardHandlers(botInstance: Telegraf): void {
       }
 
       taskSessions.register(task.id, chatId, userId);
+      const presetName = taskSessions.getPresetName(taskId, userId);
       const msgId = await sendCard(bot, chatId, task, {
         lastPrompt: session?.lastPrompt,
         statusSnippet: snippet,
+        presetName,
       });
       taskSessions.setCardMessageId(task.id, userId, msgId);
       taskSessions.updateStatus(task.id, userId, task.status, agentState);

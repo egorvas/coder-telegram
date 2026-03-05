@@ -10,6 +10,7 @@ interface TaskSession {
   lastKnownStatus?: string;
   lastKnownAgentState?: string;
   lastPrompt?: string;
+  presetName?: string;
   workingStartedAt?: number;
 }
 
@@ -151,6 +152,18 @@ class TaskSessionStore {
       session.lastPrompt = prompt;
       this.save();
     }
+  }
+
+  setPresetName(taskId: string, userId: number, name: string): void {
+    const session = this.users.get(userId)?.sessions.get(taskId);
+    if (session) {
+      session.presetName = name;
+      this.save();
+    }
+  }
+
+  getPresetName(taskId: string, userId: number): string | undefined {
+    return this.users.get(userId)?.sessions.get(taskId)?.presetName;
   }
 
   setLogMessageId(taskId: string, userId: number, messageId: number): void {

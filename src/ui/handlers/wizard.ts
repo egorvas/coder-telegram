@@ -86,7 +86,8 @@ async function createFromWizard(ctx: Context, wizard: WizardState, prompt: strin
       const userId = ctx.from?.id ?? chatId;
       log.info('task created', { taskId: task.id, template: templateName, preset: presetName, userId });
       taskSessions.register(task.id, chatId, userId);
-      const messageId = await sendCard(bot, chatId, task);
+      if (presetName) taskSessions.setPresetName(task.id, userId, presetName);
+      const messageId = await sendCard(bot, chatId, task, { presetName });
       taskSessions.setCardMessageId(task.id, userId, messageId);
       taskSessions.updateStatus(task.id, userId, task.status, task.current_state?.state);
     } catch (err) {

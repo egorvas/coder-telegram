@@ -69,20 +69,19 @@ async function doPoll(bot: Telegraf): Promise<void> {
 
       // Update card if state changed
       if (cardMessageId && (statusChanged || agentStateChanged)) {
-        let snippet: string | undefined;
-
-        snippet = agentMessage;
-
+        const presetName = taskSessions.getPresetName(taskId, userId);
         const success = await updateCard(bot, chatId, cardMessageId, task, {
           lastPrompt,
-          statusSnippet: snippet,
+          statusSnippet: agentMessage,
+          presetName,
         });
 
         if (!success) {
           // Card was deleted by user — send a new one
           const newMsgId = await sendCard(bot, chatId, task, {
             lastPrompt,
-            statusSnippet: snippet,
+            statusSnippet: agentMessage,
+            presetName,
           });
           taskSessions.setCardMessageId(taskId, userId, newMsgId);
         }

@@ -49,6 +49,7 @@ function statusLabel(status: string, agentState?: string): string {
 export interface CardTextOptions {
   lastPrompt?: string;
   statusSnippet?: string;
+  presetName?: string;
 }
 
 /**
@@ -59,9 +60,10 @@ export function buildCardText(task: CoderTask, opts?: CardTextOptions): string {
   const emoji = statusEmoji(task.status, task.current_state?.state);
   const label = statusLabel(task.status, task.current_state?.state);
 
-  // Template/workspace context
+  // Template/preset context
   const tplName = task.template_display_name || task.template_name;
-  const context = tplName ? ` (${tplName})` : '';
+  const parts = [tplName, opts?.presetName].filter(Boolean);
+  const context = parts.length > 0 ? ` (${parts.join(' / ')})` : '';
   let text = `${emoji} *${name}*${context} — ${label}`;
 
   // Show last prompt if available, otherwise initial prompt

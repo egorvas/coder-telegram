@@ -96,7 +96,7 @@ async function doPoll(bot: Telegraf): Promise<void> {
 
       if (aiFinished || firstSeenDone || hitTerminal) {
         // Skip log message after /model command — agent just restarts
-        const isModelChange = lastPrompt?.startsWith('/model');
+        const isModelChange = lastPrompt?.trim().toLowerCase().startsWith('/model');
         if (!isModelChange) {
           try {
             const logs = await client.getTaskLogs(taskId);

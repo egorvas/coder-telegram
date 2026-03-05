@@ -57,19 +57,7 @@ export function taskMenuKeyboard(taskId: string, agentState?: string) {
   return Markup.inlineKeyboard(rows);
 }
 
-// 2.3b Log message keyboard (completion messages — minimal buttons)
-export function logMessageKeyboard(taskId: string) {
-  type Btn = ReturnType<typeof Markup.button.callback> | ReturnType<typeof Markup.button.url>;
-  return Markup.inlineKeyboard([
-    [
-      Markup.button.callback('📄 Full Log', `task:fulllog:${taskId}`),
-      Markup.button.callback('🗑 Delete', `task:delete:${taskId}`),
-      Markup.button.url('🌐 Open', `${config.coderApiUrl}/tasks/me/${taskId}`),
-    ] as Btn[],
-  ]);
-}
-
-// 2.3c Live card keyboard
+// 2.3b Live card keyboard
 export function taskCardKeyboard(taskId: string, agentState?: string) {
   type Btn = ReturnType<typeof Markup.button.callback> | ReturnType<typeof Markup.button.url>;
   const rows: Btn[][] = [];

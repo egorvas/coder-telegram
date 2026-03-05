@@ -12,6 +12,7 @@ interface TaskSession {
   lastPrompt?: string;
   presetName?: string;
   workingStartedAt?: number;
+  pendingLogSend?: boolean;
 }
 
 interface UserData {
@@ -164,6 +165,18 @@ class TaskSessionStore {
 
   getPresetName(taskId: string, userId: number): string | undefined {
     return this.users.get(userId)?.sessions.get(taskId)?.presetName;
+  }
+
+  setPendingLogSend(taskId: string, userId: number, pending: boolean): void {
+    const session = this.users.get(userId)?.sessions.get(taskId);
+    if (session) {
+      session.pendingLogSend = pending;
+      this.save();
+    }
+  }
+
+  isPendingLogSend(taskId: string, userId: number): boolean {
+    return this.users.get(userId)?.sessions.get(taskId)?.pendingLogSend ?? false;
   }
 
   setLogMessageId(taskId: string, userId: number, messageId: number): void {

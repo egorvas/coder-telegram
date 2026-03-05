@@ -87,20 +87,31 @@ async function doPoll(bot: Telegraf): Promise<void> {
         }
       }
 
-      // Send log message when AI finishes or task hits terminal state
-      const aiFinished = agentState === 'idle' && lastKnownAgentState === 'working' && status === 'active';
+      // Send log message when AI finishes or task hits terminal state.
+      // We delay log sending by one poll cycle to ensure logs are fully written.
+      const wasWorking = lastKnownAgentState === 'working' || lastKnownAgentState === 'complete';
+      const aiFinished = agentState === 'idle' && wasWorking && status === 'active';
       const firstSeenDone = agentState === 'idle' && lastKnownAgentState === undefined && status === 'active';
       const terminalStatuses = ['stopped', 'error', 'unknown'];
       const hitTerminal = terminalStatuses.includes(status) && !terminalStatuses.includes(lastKnownStatus ?? '');
 
       if (aiFinished || firstSeenDone || hitTerminal) {
-        // Skip log message after /model command — agent just restarts
+        // Mark for log send on next cycle (logs may not be ready yet)
+        taskSessions.setPendingLogSend(taskId, userId, true);
+
+        // Create card if one didn't exist (legacy sessions)
+        if (!cardMessageId) {
+          const msgId = await sendCard(bot, chatId, task);
+          taskSessions.setCardMessageId(taskId, userId, msgId);
+        }
+      } else if (taskSessions.isPendingLogSend(taskId, userId) && agentState === 'idle') {
+        // Second cycle — still idle, logs should be ready now
+        taskSessions.setPendingLogSend(taskId, userId, false);
         const isModelChange = lastPrompt?.trim().toLowerCase().startsWith('/model');
         if (!isModelChange) {
           try {
             const logs = await client.getTaskLogs(taskId);
             const cleaned = extractLastResponse(logs);
-            // Calculate working duration
             const startedAt = taskSessions.getWorkingStartedAt(taskId, userId);
             const durationMs = startedAt ? Date.now() - startedAt : undefined;
             const logMsgId = await sendLogMessage(bot, chatId, task, cleaned, lastPrompt, durationMs);
@@ -109,12 +120,9 @@ async function doPoll(bot: Telegraf): Promise<void> {
             log.warn('completion log message failed', { taskId, err: String(err) });
           }
         }
-
-        // Create card if one didn't exist (legacy sessions)
-        if (!cardMessageId) {
-          const msgId = await sendCard(bot, chatId, task);
-          taskSessions.setCardMessageId(taskId, userId, msgId);
-        }
+      } else if (taskSessions.isPendingLogSend(taskId, userId) && agentState === 'working') {
+        // Agent started working again before we sent the log — cancel
+        taskSessions.setPendingLogSend(taskId, userId, false);
       }
 
       taskSessions.updateStatus(taskId, userId, status, agentState);

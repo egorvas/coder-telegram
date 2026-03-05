@@ -129,10 +129,8 @@ export async function sendLogMessage(
   durationMs?: number
 ): Promise<number> {
   const name = task.display_name || task.name;
-  const emoji = statusEmoji(task.status, task.current_state?.state);
-  const label = statusLabel(task.status, task.current_state?.state);
   const durationStr = durationMs ? ` (${formatDuration(durationMs)})` : '';
-  let header = `${emoji} *${name}* — ${label}${durationStr}`;
+  let header = `📝 *${name}* — Report${durationStr}`;
 
   if (lastPrompt) {
     const trimmed = lastPrompt.slice(0, 200);

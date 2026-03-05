@@ -59,7 +59,10 @@ export function buildCardText(task: CoderTask, opts?: CardTextOptions): string {
   const emoji = statusEmoji(task.status, task.current_state?.state);
   const label = statusLabel(task.status, task.current_state?.state);
 
-  let text = `${emoji} *${name}* — ${label}`;
+  // Template/workspace context
+  const tplName = task.template_display_name || task.template_name;
+  const context = tplName ? ` (${tplName})` : '';
+  let text = `${emoji} *${name}*${context} — ${label}`;
 
   // Show last prompt if available, otherwise initial prompt
   const prompt = opts?.lastPrompt || task.initial_prompt;

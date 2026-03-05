@@ -18,6 +18,9 @@ const PERMISSION_RE = /^⏵/;             // ⏵⏵ bypass permissions
 // Threshold: if ● block is shorter than this, it's likely trivial (e.g. "Updated plan")
 const TRIVIAL_THRESHOLD = 100;
 
+// MCP tool call blocks that should be skipped (e.g. coder_report_task)
+const MCP_NOISE_RE = /coder[-_]report[-_]task\s*\(MCP\)/i;
+
 /**
  * Returns true if the line is a hard UI boundary (user input, system event, permissions).
  */
@@ -94,9 +97,18 @@ export function extractLastResponse(rawLogs: string): string {
     return extractFallback(lines);
   }
 
-  // Try last ● block — collect everything until hard boundary,
-  // skipping separators (so plan content after ─── is included)
-  const lastIdx = markers[markers.length - 1];
+  // Filter out MCP noise markers (e.g. coder_report_task)
+  const validMarkers = markers.filter((idx) => {
+    const block = collectBlock(lines, idx, false);
+    return !MCP_NOISE_RE.test(block);
+  });
+
+  if (validMarkers.length === 0) {
+    return extractFallback(lines);
+  }
+
+  // Try last valid ● block
+  const lastIdx = validMarkers[validMarkers.length - 1];
   const block = collectBlock(lines, lastIdx, true);
 
   if (block.length >= TRIVIAL_THRESHOLD) {
@@ -104,8 +116,8 @@ export function extractLastResponse(rawLogs: string): string {
   }
 
   // Block was trivially short — try previous ● block
-  if (markers.length > 1) {
-    const prevIdx = markers[markers.length - 2];
+  if (validMarkers.length > 1) {
+    const prevIdx = validMarkers[validMarkers.length - 2];
     const prevBlock = collectBlock(lines, prevIdx, true);
     if (prevBlock.length > block.length) {
       return prevBlock;

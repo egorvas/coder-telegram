@@ -82,7 +82,6 @@ async function createFromWizard(ctx: Context, wizard: WizardState, prompt: strin
     }
   } else {
     try {
-      await ctx.reply(`Creating task from *${templateName ?? 'template'}*…`, { parse_mode: 'Markdown' });
       const task = await client.createTask(templateVersionId, presetId ?? null, prompt);
       const userId = ctx.from?.id ?? chatId;
       log.info('task created', { taskId: task.id, template: templateName, preset: presetName, userId });

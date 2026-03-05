@@ -59,34 +59,25 @@ export function buildCardText(task: CoderTask, opts?: CardTextOptions): string {
   const emoji = statusEmoji(task.status, task.current_state?.state);
   const label = statusLabel(task.status, task.current_state?.state);
 
-  let text = `${emoji} *${name}*\nStatus: ${label}`;
+  let text = `${emoji} *${name}* — ${label}`;
 
-  // Initial prompt (truncated)
-  if (task.initial_prompt) {
-    const prompt = task.initial_prompt.slice(0, 200);
-    const ellipsis = task.initial_prompt.length > 200 ? '…' : '';
-    text += `\n\n> ${prompt}${ellipsis}`;
-  }
-
-  // Last user prompt
-  if (opts?.lastPrompt) {
-    const trimmed = opts.lastPrompt.slice(0, 200);
-    text += `\n\n✏️ You: ${trimmed}`;
+  // Show last prompt if available, otherwise initial prompt
+  const prompt = opts?.lastPrompt || task.initial_prompt;
+  if (prompt) {
+    const trimmed = prompt.slice(0, 200);
+    const ellipsis = prompt.length > 200 ? '…' : '';
+    text += `\n\n> ${trimmed}${ellipsis}`;
   }
 
   // Status snippet (AI response or agent message)
   if (opts?.statusSnippet) {
     const cleaned = sanitizeText(stripAnsi(opts.statusSnippet));
-    // Reserve space for the rest of the message
-    const available = TG_LIMIT - text.length - 20; // 20 = safety margin + \n\n```\n...\n```
+    const available = TG_LIMIT - text.length - 20;
     if (available > 50 && cleaned.length > 0) {
       const { text: fitted } = fitLogs(cleaned, text.length + 4);
       text += `\n\n\`\`\`\n${fitted}\n\`\`\``;
     }
   }
-
-  // Footer
-  text += '\n\n_Reply to this message to continue_';
 
   return text;
 }
@@ -138,11 +129,10 @@ export async function sendLogMessage(
 
   const durationStr = durationMs ? ` (${formatDuration(durationMs)})` : '';
   const header = `${emoji} *${name}* — ${label}${durationStr}`;
-  const footer = '\n\n_Reply to this message to continue_';
-  const headerLen = header.length + footer.length + 4; // +4 for \n\n
+  const headerLen = header.length + 4; // +4 for \n\n
 
   if (!cleanedLogs) {
-    const msg = await bot.telegram.sendMessage(chatId, `${header}\n\n_No logs yet._${footer}`, {
+    const msg = await bot.telegram.sendMessage(chatId, `${header}\n\n_No logs yet._`, {
       parse_mode: 'Markdown',
       ...keyboard,
     });
@@ -150,8 +140,8 @@ export async function sendLogMessage(
   }
 
   const { text: fitted, wasTruncated } = fitLogs(cleanedLogs, headerLen);
-  const truncNote = wasTruncated ? '\n_(truncated — showing last portion)_' : '';
-  const fullText = `${header}\n\n\`\`\`\n${fitted}\n\`\`\`${truncNote}${footer}`;
+  const truncNote = wasTruncated ? '\n_(truncated)_' : '';
+  const fullText = `${header}\n\n\`\`\`\n${fitted}\n\`\`\`${truncNote}`;
 
   const msg = await bot.telegram.sendMessage(chatId, fullText, {
     parse_mode: 'Markdown',

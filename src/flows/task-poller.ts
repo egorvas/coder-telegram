@@ -2,7 +2,7 @@ import type { Telegraf } from 'telegraf';
 import { getCoderClient } from '../bot.js';
 import { taskSessions } from '../store/task-sessions.js';
 import { sendCard, updateCard, sendLogMessage } from '../ui/task-card.js';
-import { buildStatusSnippet, extractLastResponse } from '../utils/log-parser.js';
+import { extractLastResponse } from '../utils/log-parser.js';
 import { log } from '../utils/logger.js';
 import { CoderAuthError } from '../utils/coder-error.js';
 import { userStore } from '../store/user-store.js';
@@ -75,7 +75,7 @@ async function doPoll(bot: Telegraf): Promise<void> {
         if (agentState === 'idle' || ['stopped', 'error', 'unknown'].includes(status)) {
           try {
             const logs = await client.getTaskLogs(taskId);
-            snippet = buildStatusSnippet(agentMessage, logs);
+            snippet = extractLastResponse(logs) || agentMessage;
           } catch {
             snippet = agentMessage;
           }

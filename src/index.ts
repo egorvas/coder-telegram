@@ -94,8 +94,6 @@ bot.on('text', async (ctx) => {
   const userId = ctx.from.id;
   const text = sanitizeText(ctx.message.text);
 
-  if (text.startsWith('/')) return;
-
   // Priority 0: key setup flow
   if (uiState.isPendingKeySetup(chatId)) {
     uiState.clearPendingKeySetup(chatId);

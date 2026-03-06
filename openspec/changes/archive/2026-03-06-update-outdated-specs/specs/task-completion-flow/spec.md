@@ -1,4 +1,4 @@
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Completion notification sent to user
 When the AI finishes working (agent state transitions to `idle` after `working` or `complete`), the bot SHALL send a completion log message to the originating chat. The log message SHALL have no inline keyboard.
@@ -44,3 +44,13 @@ The completion flow SHALL handle notifications for multiple simultaneously runni
 #### Scenario: Two tasks complete in sequence
 - **WHEN** two tasks created from the same chat complete at different times
 - **THEN** each SHALL generate its own log message, and actions on one SHALL NOT affect the other
+
+## REMOVED Requirements
+
+### Requirement: Inline "Append prompt" button
+**Reason**: Replaced by reply-based interaction. Users reply to the card or log message to append a prompt.
+**Migration**: No migration needed — reply-based interaction is already implemented in `live-task-cards`.
+
+### Requirement: Inline "Delete task" button
+**Reason**: Delete button is on the live card, not on the completion log message. Covered by `live-task-cards` spec.
+**Migration**: Delete functionality is part of the card keyboard, not the completion flow.

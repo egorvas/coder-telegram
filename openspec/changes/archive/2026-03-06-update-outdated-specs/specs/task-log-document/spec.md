@@ -1,14 +1,14 @@
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Full log is sent as a Telegram document
-The system SHALL send the complete, untruncated task log as a `.txt` file using Telegram's document API when the user requests the full log.
+The system SHALL send the complete, untruncated task log as a `.txt` file using Telegram's document API when the user requests the full log. The document SHALL be sent without a caption.
 
 #### Scenario: User requests full log for a task with output
-- **WHEN** a user taps "Full Log" for a task that has log output
-- **THEN** the bot SHALL send a Telegram document with filename `<taskId-short>-log.txt`, the file contents SHALL be the complete raw log with no truncation, and the document SHALL have no caption
+- **WHEN** a user taps "📄 Full Log" on the task card
+- **THEN** the bot SHALL send a Telegram document with filename `{taskId-short}-log.txt`, the file contents SHALL be the complete raw log with no truncation, and the document SHALL have no caption
 
 #### Scenario: User requests full log for a task with no output
-- **WHEN** a user taps "Full Log" for a task that has no log output
+- **WHEN** a user taps "📄 Full Log" for a task that has no log output
 - **THEN** the bot SHALL reply with a text message "No logs yet." instead of sending an empty file
 
 ### Requirement: Full log document is built in memory

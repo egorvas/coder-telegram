@@ -165,17 +165,23 @@ export function registerTaskDashboardHandlers(botInstance: Telegraf): void {
     }
   });
 
-  // task:delete:confirm:<id> → confirmed: delete task, replace card text
+  // task:delete:confirm:<id> → confirmed: delete task, show toast, remove message
   botInstance.action(/^task:delete:confirm:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
     const userId = ctx.from?.id ?? ctx.chat?.id ?? 0;
-    await ctx.answerCbQuery();
+    const chatId = ctx.chat?.id;
+    await ctx.answerCbQuery(`Task ${taskId.slice(0, 8)} deleted`);
     const client = clientOrReply(ctx);
     if (!client) return;
     try {
       await client.deleteTask(taskId);
       taskSessions.remove(taskId, userId);
-      await ctx.editMessageText(`🗑 Task \`${taskId.slice(0, 8)}\` deleted.`, { parse_mode: 'Markdown' });
+      if (chatId) {
+        const msgId = (ctx.callbackQuery as { message?: { message_id: number } })?.message?.message_id;
+        if (msgId) {
+          try { await bot.telegram.deleteMessage(chatId, msgId); } catch { /* already gone */ }
+        }
+      }
     } catch (err) {
       await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }

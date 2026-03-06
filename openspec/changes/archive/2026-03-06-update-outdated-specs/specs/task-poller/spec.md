@@ -1,4 +1,4 @@
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Poller monitors active task sessions at a fixed interval
 The bot SHALL run a background interval loop that checks the status of every task registered in the session store. The interval SHALL default to 15 000 ms. A concurrency guard SHALL prevent overlapping poll cycles.

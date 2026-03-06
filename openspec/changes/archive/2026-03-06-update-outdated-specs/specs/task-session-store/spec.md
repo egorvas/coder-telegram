@@ -1,4 +1,4 @@
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Store associates task ID with Telegram chat
 The task session store SHALL maintain a per-user map from task ID to session data, persisted to a JSON file. Each session SHALL track: `chatId`, `cardMessageId`, `logMessageId`, `lastKnownStatus`, `lastKnownAgentState`, `lastPrompt`, `presetName`, `workingStartedAt`, `pendingLogSend`.
@@ -14,17 +14,6 @@ The task session store SHALL maintain a per-user map from task ID to session dat
 #### Scenario: Task session removed
 - **WHEN** the task is deleted
 - **THEN** the store SHALL remove the task ID entry and persist to disk
-
-### Requirement: Store supports multiple concurrent tasks
-The store SHALL support any number of simultaneously active tasks mapped to different or the same chat.
-
-#### Scenario: Two tasks from same chat
-- **WHEN** a user creates two tasks in the same chat
-- **THEN** both task IDs SHALL be independently tracked and each SHALL route notifications to that chat
-
-#### Scenario: Tasks from different chats
-- **WHEN** tasks are created from multiple different chats
-- **THEN** each task ID SHALL route only to its originating chat
 
 ### Requirement: Store tracks card and log message IDs
 The store SHALL track the Telegram message IDs for both the live card and the completion log message, enabling reply-based interaction.
@@ -91,3 +80,9 @@ The store SHALL persist all session data to a JSON file on every mutation and lo
 #### Scenario: Data preserved across restarts
 - **WHEN** a session is registered, updated, or removed
 - **THEN** the store SHALL write the updated state to disk, preserving other sections in the file (e.g., user registry)
+
+## REMOVED Requirements
+
+### Requirement: Store tracks pending append state per chat
+**Reason**: The "Append" button no longer exists. Users reply to messages instead. Pending append state is no longer needed.
+**Migration**: Remove any references to pending append state. Reply-based interaction uses `findByReplyMessageId` instead.

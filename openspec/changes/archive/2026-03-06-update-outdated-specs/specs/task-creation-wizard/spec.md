@@ -1,4 +1,4 @@
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Wizard Step 1 — select template
 The task creation wizard SHALL begin by presenting available templates as inline buttons in a single dynamic message. The wizard supports two modes: `task` and `workspace`.
@@ -78,3 +78,9 @@ The wizard SHALL include a Back button that navigates to the previous step by ed
 #### Scenario: Back from Step 3 (prompt) to Step 1 (templates) — no presets
 - **WHEN** the user taps Back on Step 3 and the template has no presets
 - **THEN** the bot SHALL re-fetch templates and edit the message to show Step 1
+
+## REMOVED Requirements
+
+### Requirement: Wizard Step 1 — select workspace
+**Reason**: Workspace selection was removed from the wizard. Tasks are created with `templateVersionId` directly, without selecting a workspace first.
+**Migration**: The wizard starts at template selection (Step 1 of 3).

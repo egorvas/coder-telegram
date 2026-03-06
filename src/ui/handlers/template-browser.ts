@@ -25,7 +25,8 @@ export async function showTemplateList(ctx: Context): Promise<void> {
 
     try {
       await ctx.editMessageText(text, { parse_mode: 'Markdown', ...keyboard });
-    } catch {
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message.includes('message is not modified')) return;
       await ctx.reply(text, { parse_mode: 'Markdown', ...keyboard });
     }
   } catch (err) {

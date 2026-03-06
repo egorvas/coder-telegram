@@ -62,7 +62,8 @@ export async function showWorkspaceList(ctx: Context): Promise<void> {
 
       try {
         await ctx.editMessageText(text, { parse_mode: 'Markdown', ...keyboard });
-      } catch {
+      } catch (e: unknown) {
+        if (e instanceof Error && e.message.includes('message is not modified')) return;
         await ctx.reply(text, { parse_mode: 'Markdown', ...keyboard });
       }
     } catch (err) {
@@ -80,7 +81,8 @@ export async function showWorkspaceList(ctx: Context): Promise<void> {
     if (workspaces.length === 0) {
       try {
         await ctx.editMessageText('No workspaces found.', keyboard);
-      } catch {
+      } catch (e: unknown) {
+        if (e instanceof Error && e.message.includes('message is not modified')) return;
         await ctx.reply('No workspaces found.', keyboard);
       }
       return;
@@ -89,7 +91,8 @@ export async function showWorkspaceList(ctx: Context): Promise<void> {
     const text = `*Workspaces* (${workspaces.length}):`;
     try {
       await ctx.editMessageText(text, { parse_mode: 'Markdown', ...keyboard });
-    } catch {
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message.includes('message is not modified')) return;
       await ctx.reply(text, { parse_mode: 'Markdown', ...keyboard });
     }
   } catch (err) {

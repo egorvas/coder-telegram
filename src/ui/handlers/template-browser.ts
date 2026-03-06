@@ -50,19 +50,10 @@ export function registerTemplateBrowserHandlers(bot: Telegraf): void {
       const presets = await client.getTemplatePresets(tpl.active_version_id);
       const keyboard = presetListKeyboard(presets, templateName);
 
-      if (presets.length === 0) {
-        await ctx.editMessageText(
-          `*${templateName}* — No presets defined.`,
-          { parse_mode: 'Markdown', ...keyboard }
-        );
-        return;
-      }
-
-      const lines = presets.map((p) => `• \`${p.Name}\`${p.Description ? ` — ${p.Description}` : ''}${p.Default ? ' ✓' : ''}`);
-      await ctx.editMessageText(
-        `*${templateName}* presets:\n\n${lines.join('\n')}`,
-        { parse_mode: 'Markdown', ...keyboard }
-      );
+      const text = presets.length === 0
+        ? `*${templateName}* — No presets defined.`
+        : `*${templateName}* — Presets:`;
+      await ctx.editMessageText(text, { parse_mode: 'Markdown', ...keyboard });
     } catch (err) {
       await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
     }

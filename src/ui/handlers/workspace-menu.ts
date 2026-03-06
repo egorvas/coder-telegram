@@ -120,47 +120,45 @@ export function registerWorkspaceMenuHandlers(bot: Telegraf): void {
     }
   });
 
-  // ws:start:<name> → start workspace
+  // ws:start:<name> → start workspace, show toast, return to list
   bot.action(/^ws:start:(.+)$/, async (ctx) => {
     const name = ctx.match[1];
-    await ctx.answerCbQuery('Starting...');
+    await ctx.answerCbQuery(`Workspace ${name} starting`);
     const client = clientOrReply(ctx);
     if (!client) return;
     try {
       await client.startWorkspace(name);
-      await ctx.reply(`Workspace *${name}* start initiated.`, { parse_mode: 'Markdown' });
       await showWorkspaceList(ctx);
     } catch (err) {
       await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 
-  // ws:stop:confirm:<name> → confirmed: stop workspace
+  // ws:stop:confirm:<name> → confirmed: stop workspace, show toast, remove message
   bot.action(/^ws:stop:confirm:(.+)$/, async (ctx) => {
     const name = ctx.match[1];
-    await ctx.answerCbQuery('Stopping...');
+    await ctx.answerCbQuery(`Workspace ${name} stopping`);
     const client = clientOrReply(ctx);
     if (!client) return;
     try {
       await client.stopWorkspace(name);
-      await ctx.reply(`Workspace *${name}* stop initiated.`, { parse_mode: 'Markdown' });
-      await showWorkspaceList(ctx);
+      try { await ctx.deleteMessage(); } catch { /* already gone */ }
     } catch (err) {
       await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 
-  // ws:stop:cancel:<name> → cancelled: show workspace action menu
+  // ws:stop:cancel:<name> → cancelled: restore workspace action menu
   bot.action(/^ws:stop:cancel:(.+)$/, async (ctx) => {
     const name = ctx.match[1];
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery('Cancelled');
     const client = clientOrReply(ctx);
     if (!client) return;
     try {
       const workspaces = await client.listWorkspaces();
       const ws = workspaces.find((w) => w.name === name);
       if (ws) {
-        await ctx.reply(`Workspace *${name}*`, { parse_mode: 'Markdown', ...workspaceActionKeyboard(ws) });
+        await ctx.editMessageText(`*${ws.name}* — ${ws.latest_build.status}`, { parse_mode: 'Markdown', ...workspaceActionKeyboard(ws) });
       } else {
         await showWorkspaceList(ctx);
       }
@@ -169,25 +167,25 @@ export function registerWorkspaceMenuHandlers(bot: Telegraf): void {
     }
   });
 
-  // ws:stop:<name> → show confirmation prompt
+  // ws:stop:<name> → show inline confirmation prompt
   bot.action(/^ws:stop:(.+)$/, async (ctx) => {
     const name = ctx.match[1];
     await ctx.answerCbQuery();
-    await ctx.reply(
+    await ctx.editMessageText(
       `Stop workspace *${name}*?`,
       { parse_mode: 'Markdown', ...confirmKeyboard(`ws:stop:confirm:${name}`, `ws:stop:cancel:${name}`) }
     );
   });
 
-  // ws:delete:confirm:<name> → confirmed: delete workspace, replace text
+  // ws:delete:confirm:<name> → confirmed: delete workspace, show toast, remove message
   bot.action(/^ws:delete:confirm:(.+)$/, async (ctx) => {
     const name = ctx.match[1];
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery(`Workspace ${name} deleted`);
     const client = clientOrReply(ctx);
     if (!client) return;
     try {
       await client.deleteWorkspace(name);
-      await ctx.editMessageText(`🗑 Workspace *${name}* deletion initiated.`, { parse_mode: 'Markdown' });
+      try { await ctx.deleteMessage(); } catch { /* already gone */ }
     } catch (err) {
       await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }

@@ -5,6 +5,7 @@ export interface WizardState {
   templateVersionId?: string;
   presetId?: string;
   presetName?: string;
+  messageId?: number;
 }
 
 interface UiState {

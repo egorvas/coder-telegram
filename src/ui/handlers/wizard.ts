@@ -28,6 +28,35 @@ function clientOrReply(ctx: Context): ReturnType<typeof getCoderClient> {
   return client;
 }
 
+/**
+ * Edit the wizard message in-place or send a new one if editing fails.
+ * Returns the message_id.
+ */
+async function editOrSend(
+  ctx: Context,
+  chatId: number,
+  messageId: number | undefined,
+  text: string,
+  keyboard: ReturnType<typeof wizardTemplateKeyboard>
+): Promise<number> {
+  if (messageId) {
+    try {
+      await bot.telegram.editMessageText(chatId, messageId, undefined, text, {
+        parse_mode: 'Markdown',
+        ...keyboard,
+      });
+      return messageId;
+    } catch {
+      // Message gone or can't edit — send new one
+    }
+  }
+  const msg = await bot.telegram.sendMessage(chatId, text, {
+    parse_mode: 'Markdown',
+    ...keyboard,
+  });
+  return msg.message_id;
+}
+
 export async function startWizard(ctx: Context, mode: 'task' | 'workspace' = 'task'): Promise<void> {
   const chatId = ctx.chat?.id;
   if (!chatId) return;
@@ -41,12 +70,21 @@ export async function startWizard(ctx: Context, mode: 'task' | 'workspace' = 'ta
       await ctx.reply('No templates available.', mainMenuKeyboard(config.adminUsers.has(userId)));
       return;
     }
-    uiState.setWizard(chatId, { step: 1, mode });
     const label = mode === 'workspace' ? 'New Workspace' : 'New Task';
-    await ctx.reply(`*${label} — Step 1/3* — Select a template:`, {
-      parse_mode: 'Markdown',
-      ...wizardTemplateKeyboard(templates),
-    });
+    const text = `*${label} — Step 1/3* — Select a template:`;
+    const keyboard = wizardTemplateKeyboard(templates);
+
+    // Try to edit the current message (if triggered from inline button)
+    let msgId: number | undefined;
+    try {
+      await ctx.editMessageText(text, { parse_mode: 'Markdown', ...keyboard });
+      msgId = (ctx.callbackQuery as { message?: { message_id: number } })?.message?.message_id;
+    } catch {
+      const msg = await ctx.reply(text, { parse_mode: 'Markdown', ...keyboard });
+      msgId = msg.message_id;
+    }
+
+    uiState.setWizard(chatId, { step: 1, mode, messageId: msgId });
   } catch (err) {
     await handleCoderError(ctx, err, ctx.from?.id ?? 0);
   }
@@ -60,16 +98,22 @@ async function createFromWizard(ctx: Context, wizard: WizardState, prompt: strin
 
   uiState.clearWizard(chatId);
 
-  const { templateVersionId, templateName, presetId, presetName, mode } = wizard;
+  const { templateVersionId, templateName, presetId, presetName, messageId, mode } = wizard;
   if (!templateVersionId) {
     await ctx.reply('Wizard state lost. Please start again.');
     return;
   }
 
+  // Delete the wizard message
+  if (messageId) {
+    try {
+      await bot.telegram.deleteMessage(chatId, messageId);
+    } catch { /* already gone */ }
+  }
+
   if (mode === 'workspace') {
     try {
       const name = `ws-${randomSuffix()}`;
-      await ctx.reply(`Creating workspace *${name}* from *${templateName ?? 'template'}*...`, { parse_mode: 'Markdown' });
       const ws = await client.createWorkspace(templateVersionId, presetId ?? null, name);
       log.info('workspace created', { name: ws.name, template: templateName, userId: ctx.from?.id });
       await ctx.reply(
@@ -87,8 +131,8 @@ async function createFromWizard(ctx: Context, wizard: WizardState, prompt: strin
       log.info('task created', { taskId: task.id, template: templateName, preset: presetName, userId });
       taskSessions.register(task.id, chatId, userId);
       if (presetName) taskSessions.setPresetName(task.id, userId, presetName);
-      const messageId = await sendCard(bot, chatId, task, { presetName });
-      taskSessions.setCardMessageId(task.id, userId, messageId);
+      const cardMsgId = await sendCard(bot, chatId, task, { presetName });
+      taskSessions.setCardMessageId(task.id, userId, cardMsgId);
       taskSessions.updateStatus(task.id, userId, task.status, task.current_state?.state);
     } catch (err) {
       await handleCoderError(ctx, err, ctx.from?.id ?? 0);
@@ -116,6 +160,7 @@ export function registerWizardHandlers(bot: Telegraf): void {
 
     const wizard = uiState.getWizard(chatId);
     const mode = wizard?.mode ?? 'task';
+    const messageId = wizard?.messageId;
 
     try {
       const templates = await client.listTemplates();
@@ -126,25 +171,28 @@ export function registerWizardHandlers(bot: Telegraf): void {
       }
 
       const presets = await client.getTemplatePresets(tpl.active_version_id);
-      uiState.setWizard(chatId, {
-        step: presets.length > 0 ? 2 : 3,
-        mode,
-        templateName,
-        templateVersionId: tpl.active_version_id,
-      });
+      const hasPresets = presets.length > 0;
 
-      if (presets.length > 0) {
-        await ctx.reply('*Step 2/3* — Select a preset:', {
-          parse_mode: 'Markdown',
-          ...wizardPresetKeyboard(presets),
+      if (hasPresets) {
+        const text = `*Step 2/3* — Select a preset:`;
+        const keyboard = wizardPresetKeyboard(presets);
+        const msgId = await editOrSend(ctx, chatId, messageId, text, keyboard);
+        uiState.setWizard(chatId, {
+          step: 2, mode, templateName,
+          templateVersionId: tpl.active_version_id,
+          messageId: msgId,
         });
       } else {
         const canSkip = mode === 'workspace';
-        await ctx.reply(
-          '*Step 3/3* — No presets available (using defaults).\n\nEnter a prompt' +
-          (canSkip ? ' or skip:' : ':'),
-          { parse_mode: 'Markdown', ...promptKeyboard(canSkip) }
-        );
+        const text = '*Step 3/3* — No presets available (using defaults).\n\nEnter a prompt' +
+          (canSkip ? ' or skip:' : ':');
+        const keyboard = promptKeyboard(canSkip);
+        const msgId = await editOrSend(ctx, chatId, messageId, text, keyboard);
+        uiState.setWizard(chatId, {
+          step: 3, mode, templateName,
+          templateVersionId: tpl.active_version_id,
+          messageId: msgId,
+        });
       }
     } catch (err) {
       await handleCoderError(ctx, err, ctx.from?.id ?? 0);
@@ -172,12 +220,11 @@ export function registerWizardHandlers(bot: Telegraf): void {
       }
     } catch { /* use id as fallback */ }
 
-    uiState.setWizard(chatId, { ...wizard, step: 3, presetId, presetName });
     const canSkip = wizard.mode === 'workspace';
-    await ctx.reply(
-      '*Step 3/3* — Enter a prompt' + (canSkip ? ' or skip:' : ':'),
-      { parse_mode: 'Markdown', ...promptKeyboard(canSkip) }
-    );
+    const text = '*Step 3/3* — Enter a prompt' + (canSkip ? ' or skip:' : ':');
+    const keyboard = promptKeyboard(canSkip);
+    const msgId = await editOrSend(ctx, chatId, wizard.messageId, text, keyboard);
+    uiState.setWizard(chatId, { ...wizard, step: 3, presetId, presetName, messageId: msgId });
   });
 
   // wizard:skip → workspace mode: create without prompt
@@ -192,17 +239,21 @@ export function registerWizardHandlers(bot: Telegraf): void {
     await createFromWizard(ctx, wizard, '');
   });
 
-  // wizard:cancel → clear state, return to main menu
+  // wizard:cancel → clear state, edit message to "Cancelled"
   bot.action('wizard:cancel', async (ctx) => {
     const chatId = ctx.chat?.id;
     if (!chatId) return;
     await ctx.answerCbQuery();
+    const wizard = uiState.getWizard(chatId);
     uiState.clearWizard(chatId);
-    const userId = ctx.from?.id ?? 0;
-    await ctx.reply('Wizard cancelled.', mainMenuKeyboard(config.adminUsers.has(userId)));
+    if (wizard?.messageId) {
+      try {
+        await bot.telegram.deleteMessage(chatId, wizard.messageId);
+      } catch { /* already gone */ }
+    }
   });
 
-  // wizard:back → go back one step
+  // wizard:back → go back one step (edit same message)
   bot.action('wizard:back', async (ctx) => {
     const chatId = ctx.chat?.id;
     if (!chatId) return;
@@ -216,26 +267,25 @@ export function registerWizardHandlers(bot: Telegraf): void {
     try {
       if (wizard.step === 2) {
         const templates = await client.listTemplates();
-        uiState.setWizard(chatId, { step: 1, mode: wizard.mode });
-        await ctx.reply('*Step 1/3* — Select a template:', {
-          parse_mode: 'Markdown',
-          ...wizardTemplateKeyboard(templates),
-        });
+        const text = '*Step 1/3* — Select a template:';
+        const keyboard = wizardTemplateKeyboard(templates);
+        const msgId = await editOrSend(ctx, chatId, wizard.messageId, text, keyboard);
+        uiState.setWizard(chatId, { step: 1, mode: wizard.mode, messageId: msgId });
       } else if (wizard.step === 3 && wizard.templateVersionId) {
         const presets = await client.getTemplatePresets(wizard.templateVersionId);
         if (presets.length > 0) {
-          uiState.setWizard(chatId, { ...wizard, step: 2, presetId: undefined, presetName: undefined });
-          await ctx.reply('*Step 2/3* — Select a preset:', {
-            parse_mode: 'Markdown',
-            ...wizardPresetKeyboard(presets),
+          const text = '*Step 2/3* — Select a preset:';
+          const keyboard = wizardPresetKeyboard(presets);
+          const msgId = await editOrSend(ctx, chatId, wizard.messageId, text, keyboard);
+          uiState.setWizard(chatId, {
+            ...wizard, step: 2, presetId: undefined, presetName: undefined, messageId: msgId,
           });
         } else {
           const templates = await client.listTemplates();
-          uiState.setWizard(chatId, { step: 1, mode: wizard.mode });
-          await ctx.reply('*Step 1/3* — Select a template:', {
-            parse_mode: 'Markdown',
-            ...wizardTemplateKeyboard(templates),
-          });
+          const text = '*Step 1/3* — Select a template:';
+          const keyboard = wizardTemplateKeyboard(templates);
+          const msgId = await editOrSend(ctx, chatId, wizard.messageId, text, keyboard);
+          uiState.setWizard(chatId, { step: 1, mode: wizard.mode, messageId: msgId });
         }
       }
     } catch (err) {

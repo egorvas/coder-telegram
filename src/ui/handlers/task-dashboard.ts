@@ -7,7 +7,7 @@ import { uiState } from '../state.js';
 import { userStore } from '../../store/user-store.js';
 import type { CoderTask } from '../../coder/types.js';
 import { startWizard } from './wizard.js';
-import { sendCard, updateCard } from '../task-card.js';
+import { sendCard, updateCard, buildCardText } from '../task-card.js';
 import { log } from '../../utils/logger.js';
 import { handleCoderError, CoderAuthError } from '../../utils/coder-error.js';
 
@@ -165,40 +165,46 @@ export function registerTaskDashboardHandlers(botInstance: Telegraf): void {
     }
   });
 
-  // task:delete:confirm:<id> → confirmed: delete task and clean up card
+  // task:delete:confirm:<id> → confirmed: delete task, replace card text
   botInstance.action(/^task:delete:confirm:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
     const userId = ctx.from?.id ?? ctx.chat?.id ?? 0;
-    const chatId = ctx.chat?.id;
     await ctx.answerCbQuery();
     const client = clientOrReply(ctx);
     if (!client) return;
     try {
-      // Try to delete the card message
-      const cardMsgId = taskSessions.getCardMessageId(taskId, userId);
-      if (cardMsgId && chatId) {
-        try {
-          await bot.telegram.deleteMessage(chatId, cardMsgId);
-        } catch { /* card already gone */ }
-      }
       await client.deleteTask(taskId);
       taskSessions.remove(taskId, userId);
-      await ctx.reply(`Task \`${taskId.slice(0, 8)}\` deleted.`, { parse_mode: 'Markdown' });
-      await showTaskDashboard(ctx);
+      await ctx.editMessageText(`🗑 Task \`${taskId.slice(0, 8)}\` deleted.`, { parse_mode: 'Markdown' });
     } catch (err) {
       await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 
-  // task:delete:cancel:<id> → cancelled
+  // task:delete:cancel:<id> → restore card keyboard
   botInstance.action(/^task:delete:cancel:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
+    const userId = ctx.from?.id ?? 0;
     await ctx.answerCbQuery('Cancelled');
-    const agentState = taskSessions.getAgentState(taskId, ctx.from?.id ?? 0);
-    await ctx.editMessageReplyMarkup(taskCardKeyboard(taskId, agentState).reply_markup);
+    const client = clientOrReply(ctx);
+    if (!client) return;
+    try {
+      const task = await client.getTask(taskId);
+      const session = taskSessions.get(taskId, userId);
+      const presetName = taskSessions.getPresetName(taskId, userId);
+      const cardText = buildCardText(task, {
+        lastPrompt: session?.lastPrompt,
+        statusSnippet: task.current_state?.message,
+        presetName,
+      });
+      const keyboard = taskCardKeyboard(taskId, task.current_state?.state);
+      await ctx.editMessageText(cardText, { parse_mode: 'Markdown', ...keyboard });
+    } catch (err) {
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
+    }
   });
 
-  // task:delete:<id> → show confirmation prompt
+  // task:delete:<id> → replace card with confirmation prompt
   botInstance.action(/^task:delete:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
     await ctx.answerCbQuery();
@@ -207,7 +213,7 @@ export function registerTaskDashboardHandlers(botInstance: Telegraf): void {
     try {
       const task = await client.getTask(taskId);
       const name = task.display_name || task.name;
-      await ctx.reply(
+      await ctx.editMessageText(
         `Delete task *${name}*? This cannot be undone.`,
         { parse_mode: 'Markdown', ...confirmKeyboard(`task:delete:confirm:${taskId}`, `task:delete:cancel:${taskId}`) }
       );
@@ -223,17 +229,13 @@ export function registerTaskDashboardHandlers(botInstance: Telegraf): void {
     const client = clientOrReply(ctx);
     if (!client) return;
     try {
-      const [task, logs] = await Promise.all([
-        client.getTask(taskId),
-        client.getTaskLogs(taskId),
-      ]);
+      const logs = await client.getTaskLogs(taskId);
       if (!logs) {
         await ctx.reply('No logs yet.');
         return;
       }
       await ctx.replyWithDocument(
         { source: Buffer.from(logs), filename: `${taskId.slice(0, 8)}-log.txt` },
-        { caption: `Task \`${taskId.slice(0, 8)}\` — ${task.status}`, parse_mode: 'Markdown' }
       );
     } catch (err) {
       await handleCoderError(ctx, err, ctx.from?.id ?? 0);
@@ -256,6 +258,7 @@ export function registerTaskDashboardHandlers(botInstance: Telegraf): void {
     if (!client) return;
     try {
       await client.appendTaskPrompt(taskId, `/model ${model}`);
+      taskSessions.setLastPrompt(taskId, ctx.from?.id ?? 0, `/model ${model}`);
       const agentState = taskSessions.getAgentState(taskId, ctx.from?.id ?? 0);
       await ctx.editMessageReplyMarkup(taskCardKeyboard(taskId, agentState).reply_markup);
     } catch (err) {

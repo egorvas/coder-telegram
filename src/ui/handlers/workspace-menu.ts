@@ -179,32 +179,31 @@ export function registerWorkspaceMenuHandlers(bot: Telegraf): void {
     );
   });
 
-  // ws:delete:confirm:<name> → confirmed: delete workspace
+  // ws:delete:confirm:<name> → confirmed: delete workspace, replace text
   bot.action(/^ws:delete:confirm:(.+)$/, async (ctx) => {
     const name = ctx.match[1];
-    await ctx.answerCbQuery('Deleting...');
+    await ctx.answerCbQuery();
     const client = clientOrReply(ctx);
     if (!client) return;
     try {
       await client.deleteWorkspace(name);
-      await ctx.reply(`Workspace *${name}* deletion initiated.`, { parse_mode: 'Markdown' });
-      await showWorkspaceList(ctx);
+      await ctx.editMessageText(`🗑 Workspace *${name}* deletion initiated.`, { parse_mode: 'Markdown' });
     } catch (err) {
       await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 
-  // ws:delete:cancel:<name> → cancelled: show workspace action menu
+  // ws:delete:cancel:<name> → restore workspace action menu
   bot.action(/^ws:delete:cancel:(.+)$/, async (ctx) => {
     const name = ctx.match[1];
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery('Cancelled');
     const client = clientOrReply(ctx);
     if (!client) return;
     try {
       const workspaces = await client.listWorkspaces();
       const ws = workspaces.find((w) => w.name === name);
       if (ws) {
-        await ctx.reply(`Workspace *${name}*`, { parse_mode: 'Markdown', ...workspaceActionKeyboard(ws) });
+        await ctx.editMessageText(`Workspace *${name}*`, { parse_mode: 'Markdown', ...workspaceActionKeyboard(ws) });
       } else {
         await showWorkspaceList(ctx);
       }
@@ -213,11 +212,11 @@ export function registerWorkspaceMenuHandlers(bot: Telegraf): void {
     }
   });
 
-  // ws:delete:<name> → show confirmation prompt
+  // ws:delete:<name> → replace with confirmation prompt
   bot.action(/^ws:delete:(.+)$/, async (ctx) => {
     const name = ctx.match[1];
     await ctx.answerCbQuery();
-    await ctx.reply(
+    await ctx.editMessageText(
       `Delete workspace *${name}*? This cannot be undone.`,
       { parse_mode: 'Markdown', ...confirmKeyboard(`ws:delete:confirm:${name}`, `ws:delete:cancel:${name}`) }
     );

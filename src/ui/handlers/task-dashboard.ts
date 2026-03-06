@@ -10,6 +10,7 @@ import { startWizard } from './wizard.js';
 import { sendCard, updateCard, buildCardText } from '../task-card.js';
 import { log } from '../../utils/logger.js';
 import { handleCoderError, CoderAuthError } from '../../utils/coder-error.js';
+import { stripAnsi } from '../../utils/log-parser.js';
 
 interface TaskWithWorkspace {
   task: CoderTask;
@@ -243,7 +244,7 @@ export function registerTaskDashboardHandlers(botInstance: Telegraf): void {
         return;
       }
       await ctx.replyWithDocument(
-        { source: Buffer.from(logs), filename: `${taskId.slice(0, 8)}-log.txt` },
+        { source: Buffer.from(stripAnsi(logs)), filename: `${taskId.slice(0, 8)}-log.txt` },
       );
     } catch (err) {
       await handleCoderError(ctx, err, ctx.from?.id ?? 0);

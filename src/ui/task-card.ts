@@ -1,7 +1,7 @@
 import type { Telegraf } from 'telegraf';
 import type { CoderTask } from '../coder/types.js';
 import { taskCardKeyboard } from './keyboards.js';
-import { sanitizeText, fitLogs } from '../utils/telegram.js';
+import { sanitizeText, fitLogs, splitForTelegram } from '../utils/telegram.js';
 import { stripAnsi } from '../utils/log-parser.js';
 import { log } from '../utils/logger.js';
 
@@ -118,7 +118,8 @@ function formatDuration(ms: number): string {
 
 /**
  * Send a log message with the AI's response. User can reply to it to continue.
- * Returns the message_id.
+ * For long responses, splits into multiple messages (reply-chained).
+ * Returns the first message_id.
  */
 export async function sendLogMessage(
   bot: Telegraf,
@@ -138,8 +139,6 @@ export async function sendLogMessage(
     header += `\n\n> ${trimmed}${ellipsis}`;
   }
 
-  const headerLen = header.length + 4; // +4 for \n\n
-
   if (!cleanedLogs) {
     const msg = await bot.telegram.sendMessage(chatId, `${header}\n\n_No logs yet._`, {
       parse_mode: 'Markdown',
@@ -147,14 +146,22 @@ export async function sendLogMessage(
     return msg.message_id;
   }
 
-  const { text: fitted, wasTruncated } = fitLogs(cleanedLogs, headerLen);
-  const truncNote = wasTruncated ? '\n_(truncated)_' : '';
-  const fullText = `${header}\n\n\`\`\`\n${fitted}\n\`\`\`${truncNote}`;
+  const chunks = splitForTelegram(header, cleanedLogs);
 
-  const msg = await bot.telegram.sendMessage(chatId, fullText, {
+  // Send first message
+  const firstMsg = await bot.telegram.sendMessage(chatId, chunks[0], {
     parse_mode: 'Markdown',
   });
-  return msg.message_id;
+
+  // Send remaining chunks as replies to the first message
+  for (let i = 1; i < chunks.length; i++) {
+    await bot.telegram.sendMessage(chatId, chunks[i], {
+      parse_mode: 'Markdown',
+      reply_parameters: { message_id: firstMsg.message_id },
+    });
+  }
+
+  return firstMsg.message_id;
 }
 
 /**

@@ -44,3 +44,43 @@ export function buildLogMessage(taskId: string, status: string, rawLogs: string)
   const footer = wasTruncated ? '\n_(truncated — showing last portion)_' : '';
   return `${header}\n\n\`\`\`\n${text}\n\`\`\`${footer}`;
 }
+
+/**
+ * Split a long body into multiple Telegram messages, each within TG_LIMIT.
+ * First chunk includes the header; subsequent chunks are code-block continuations.
+ * Splits at line boundaries to avoid cutting words.
+ */
+export function splitForTelegram(header: string, body: string): string[] {
+  const safeLimit = TG_LIMIT - 40; // safety margin
+
+  // First message: header + beginning of body in code block
+  const firstAvailable = safeLimit - header.length - 4 - CODE_BLOCK_OVERHEAD; // 4 = \n\n
+  if (body.length <= firstAvailable) {
+    return [`${header}\n\n\`\`\`\n${body}\n\`\`\``];
+  }
+
+  const messages: string[] = [];
+  let remaining = body;
+
+  // First chunk with header
+  const firstChunk = cutAtLineBreak(remaining, firstAvailable);
+  messages.push(`${header}\n\n\`\`\`\n${firstChunk}\n\`\`\``);
+  remaining = remaining.slice(firstChunk.length).replace(/^\n/, '');
+
+  // Subsequent chunks — code blocks only
+  const chunkSize = safeLimit - CODE_BLOCK_OVERHEAD;
+  while (remaining.length > 0) {
+    const chunk = cutAtLineBreak(remaining, chunkSize);
+    messages.push(`\`\`\`\n${chunk}\n\`\`\``);
+    remaining = remaining.slice(chunk.length).replace(/^\n/, '');
+  }
+
+  return messages;
+}
+
+function cutAtLineBreak(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  const lastNl = text.lastIndexOf('\n', maxLen);
+  if (lastNl > 0) return text.slice(0, lastNl);
+  return text.slice(0, maxLen);
+}

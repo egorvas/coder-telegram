@@ -71,13 +71,11 @@ async function doPoll(bot: Telegraf): Promise<void> {
 
       // Update card if state changed
       if (cardMessageId && (statusChanged || agentStateChanged)) {
-        const noKeyboard = isGroupChat(chatId);
         const presetName = taskSessions.getPresetName(taskId, userId);
         const success = await updateCard(bot, chatId, cardMessageId, task, {
           lastPrompt,
           statusSnippet: agentMessage,
           presetName,
-          noKeyboard,
         });
 
         if (!success) {
@@ -86,7 +84,6 @@ async function doPoll(bot: Telegraf): Promise<void> {
             lastPrompt,
             statusSnippet: agentMessage,
             presetName,
-            noKeyboard,
           });
           taskSessions.setCardMessageId(taskId, userId, newMsgId);
           if (isGroupChat(chatId)) groupTaskStore.setCardMessageId(chatId, newMsgId);
@@ -107,7 +104,7 @@ async function doPoll(bot: Telegraf): Promise<void> {
 
         // Create card if one didn't exist (legacy sessions)
         if (!cardMessageId) {
-          const msgId = await sendCard(bot, chatId, task, isGroupChat(chatId) ? { noKeyboard: true } : undefined);
+          const msgId = await sendCard(bot, chatId, task);
           taskSessions.setCardMessageId(taskId, userId, msgId);
           if (isGroupChat(chatId)) groupTaskStore.setCardMessageId(chatId, msgId);
         }

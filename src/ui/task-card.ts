@@ -94,14 +94,14 @@ export async function sendCard(
   bot: Telegraf,
   chatId: number,
   task: CoderTask,
-  opts?: CardTextOptions & { noKeyboard?: boolean }
+  opts?: CardTextOptions
 ): Promise<number> {
   const text = buildCardText(task, opts);
-  const extra: Record<string, unknown> = { parse_mode: 'Markdown' };
-  if (!opts?.noKeyboard) {
-    Object.assign(extra, taskCardKeyboard(task.id, task.current_state?.state));
-  }
-  const msg = await bot.telegram.sendMessage(chatId, text, extra);
+  const keyboard = taskCardKeyboard(task.id, task.current_state?.state);
+  const msg = await bot.telegram.sendMessage(chatId, text, {
+    parse_mode: 'Markdown',
+    ...keyboard,
+  });
   return msg.message_id;
 }
 
@@ -173,15 +173,15 @@ export async function updateCard(
   chatId: number,
   messageId: number,
   task: CoderTask,
-  opts?: CardTextOptions & { noKeyboard?: boolean }
+  opts?: CardTextOptions
 ): Promise<boolean> {
   const text = buildCardText(task, opts);
-  const extra: Record<string, unknown> = { parse_mode: 'Markdown' };
-  if (!opts?.noKeyboard) {
-    Object.assign(extra, taskCardKeyboard(task.id, task.current_state?.state));
-  }
+  const keyboard = taskCardKeyboard(task.id, task.current_state?.state);
   try {
-    await bot.telegram.editMessageText(chatId, messageId, undefined, text, extra);
+    await bot.telegram.editMessageText(chatId, messageId, undefined, text, {
+      parse_mode: 'Markdown',
+      ...keyboard,
+    });
     return true;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

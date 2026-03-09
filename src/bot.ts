@@ -12,10 +12,6 @@ export function getCoderClient(userId: number): CoderClient | null {
   return new CoderClient(config.coderApiUrl, key);
 }
 
-let botUsername = '';
-export function getBotUsername(): string { return botUsername; }
-export function setBotUsername(name: string): void { botUsername = name; }
-
 process.once('SIGINT', () => {
   log.info('shutting down');
   bot.stop('SIGINT');

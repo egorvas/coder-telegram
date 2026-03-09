@@ -11,9 +11,6 @@ import { sendCard, updateCard, buildCardText } from '../task-card.js';
 import { log } from '../../utils/logger.js';
 import { handleCoderError, CoderAuthError } from '../../utils/coder-error.js';
 import { stripAnsi } from '../../utils/log-parser.js';
-import { isGroupChat } from '../../utils/group-chat.js';
-import { groupTaskStore } from '../../store/group-tasks.js';
-import type { CoderClient } from '../../coder/client.js';
 
 interface TaskWithWorkspace {
   task: CoderTask;
@@ -28,23 +25,6 @@ function clientOrReply(ctx: Context): ReturnType<typeof getCoderClient> {
     void ctx.reply('You need to configure your API key first. Use /start.');
   }
   return client;
-}
-
-/** Get client for a task action — in groups uses the task owner's client. */
-function clientForTask(ctx: Context, taskId: string): { client: CoderClient; userId: number } | null {
-  const chatId = ctx.chat?.id;
-  if (chatId && isGroupChat(chatId)) {
-    const binding = groupTaskStore.get(chatId);
-    if (binding && binding.taskId === taskId) {
-      const client = getCoderClient(binding.ownerUserId);
-      if (client) return { client, userId: binding.ownerUserId };
-    }
-    void ctx.reply('Task owner\'s API key is no longer valid.');
-    return null;
-  }
-  const client = clientOrReply(ctx);
-  if (!client) return null;
-  return { client, userId: ctx.from?.id ?? 0 };
 }
 
 async function fetchAllTasks(ctx: Context): Promise<TaskWithWorkspace[] | null> {
@@ -191,15 +171,14 @@ export function registerTaskDashboardHandlers(botInstance: Telegraf): void {
   // task:delete:confirm:<id> → confirmed: delete task, show toast, remove message
   botInstance.action(/^task:delete:confirm:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
+    const userId = ctx.from?.id ?? ctx.chat?.id ?? 0;
     const chatId = ctx.chat?.id;
     await ctx.answerCbQuery(`Task ${taskId.slice(0, 8)} deleted`);
-    const resolved = clientForTask(ctx, taskId);
-    if (!resolved) return;
-    const { client, userId } = resolved;
+    const client = clientOrReply(ctx);
+    if (!client) return;
     try {
       await client.deleteTask(taskId);
       taskSessions.remove(taskId, userId);
-      if (chatId && isGroupChat(chatId)) groupTaskStore.remove(chatId);
       if (chatId) {
         const msgId = (ctx.callbackQuery as { message?: { message_id: number } })?.message?.message_id;
         if (msgId) {
@@ -207,17 +186,17 @@ export function registerTaskDashboardHandlers(botInstance: Telegraf): void {
         }
       }
     } catch (err) {
-      await handleCoderError(ctx, err, userId);
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 
   // task:delete:cancel:<id> → restore card keyboard
   botInstance.action(/^task:delete:cancel:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
+    const userId = ctx.from?.id ?? 0;
     await ctx.answerCbQuery('Cancelled');
-    const resolved = clientForTask(ctx, taskId);
-    if (!resolved) return;
-    const { client, userId } = resolved;
+    const client = clientOrReply(ctx);
+    if (!client) return;
     try {
       const task = await client.getTask(taskId);
       const session = taskSessions.get(taskId, userId);
@@ -230,7 +209,7 @@ export function registerTaskDashboardHandlers(botInstance: Telegraf): void {
       const keyboard = taskCardKeyboard(taskId, task.current_state?.state);
       await ctx.editMessageText(cardText, { parse_mode: 'Markdown', ...keyboard });
     } catch (err) {
-      await handleCoderError(ctx, err, userId);
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 
@@ -238,9 +217,8 @@ export function registerTaskDashboardHandlers(botInstance: Telegraf): void {
   botInstance.action(/^task:delete:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
     await ctx.answerCbQuery();
-    const resolved = clientForTask(ctx, taskId);
-    if (!resolved) return;
-    const { client, userId } = resolved;
+    const client = clientOrReply(ctx);
+    if (!client) return;
     try {
       const task = await client.getTask(taskId);
       const name = task.display_name || task.name;
@@ -249,7 +227,7 @@ export function registerTaskDashboardHandlers(botInstance: Telegraf): void {
         { parse_mode: 'Markdown', ...confirmKeyboard(`task:delete:confirm:${taskId}`, `task:delete:cancel:${taskId}`) }
       );
     } catch (err) {
-      await handleCoderError(ctx, err, userId);
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 
@@ -257,9 +235,8 @@ export function registerTaskDashboardHandlers(botInstance: Telegraf): void {
   botInstance.action(/^task:fulllog:(.+)$/, async (ctx) => {
     const taskId = ctx.match[1];
     await ctx.answerCbQuery();
-    const resolved = clientForTask(ctx, taskId);
-    if (!resolved) return;
-    const { client, userId } = resolved;
+    const client = clientOrReply(ctx);
+    if (!client) return;
     try {
       const logs = await client.getTaskLogs(taskId);
       if (!logs) {
@@ -270,7 +247,7 @@ export function registerTaskDashboardHandlers(botInstance: Telegraf): void {
         { source: Buffer.from(stripAnsi(logs)), filename: `${taskId.slice(0, 8)}-log.txt` },
       );
     } catch (err) {
-      await handleCoderError(ctx, err, userId);
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 
@@ -286,16 +263,15 @@ export function registerTaskDashboardHandlers(botInstance: Telegraf): void {
     const taskId = ctx.match[1];
     const model = ctx.match[2];
     await ctx.answerCbQuery(`Model set to ${model}`);
-    const resolved = clientForTask(ctx, taskId);
-    if (!resolved) return;
-    const { client, userId } = resolved;
+    const client = clientOrReply(ctx);
+    if (!client) return;
     try {
       await client.appendTaskPrompt(taskId, `/model ${model}`);
-      taskSessions.setLastPrompt(taskId, userId, `/model ${model}`);
-      const agentState = taskSessions.getAgentState(taskId, userId);
+      taskSessions.setLastPrompt(taskId, ctx.from?.id ?? 0, `/model ${model}`);
+      const agentState = taskSessions.getAgentState(taskId, ctx.from?.id ?? 0);
       await ctx.editMessageReplyMarkup(taskCardKeyboard(taskId, agentState).reply_markup);
     } catch (err) {
-      await handleCoderError(ctx, err, userId);
+      await handleCoderError(ctx, err, ctx.from?.id ?? 0);
     }
   });
 }

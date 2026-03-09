@@ -1,4 +1,4 @@
-import { bot, getCoderClient, setBotUsername, getBotUsername } from './bot.js';
+import { bot, getCoderClient } from './bot.js';
 import { config } from './config.js';
 import { startCommand, keySetupMessage } from './commands/start.js';
 import { tasksListCommand } from './commands/tasks/list.js';
@@ -17,12 +17,10 @@ import { registerWorkspaceMenuHandlers } from './ui/handlers/workspace-menu.js';
 import { sanitizeText } from './utils/telegram.js';
 import { registerTemplateBrowserHandlers } from './ui/handlers/template-browser.js';
 import { registerAdminPanelHandlers, showAdminPanel } from './ui/handlers/admin-panel.js';
-import { updateCard, sendCard } from './ui/task-card.js';
+import { updateCard } from './ui/task-card.js';
 import { CoderClient } from './coder/client.js';
 import { log } from './utils/logger.js';
 import { handleCoderError } from './utils/coder-error.js';
-import { isGroupChat, extractMentionText } from './utils/group-chat.js';
-import { groupTaskStore } from './store/group-tasks.js';
 
 // ─── Middleware: update logger ────────────────────────────────────────────────
 bot.use((ctx, next) => {
@@ -47,10 +45,6 @@ bot.use(async (ctx, next) => {
   if (!userId) {
     await ctx.reply('You don\'t have access to this bot. Contact the administrator to be added.');
     return;
-  }
-  // In group chats, allow all members through
-  if (isGroupChat(ctx.chat?.id ?? 0)) {
-    return next();
   }
   // If admins are configured, enforce access control via user store
   if (config.adminUsers.size > 0 && !userStore.isAllowed(userId)) {
@@ -94,144 +88,11 @@ bot.command('resetkey', async (ctx) => {
   await ctx.reply(keySetupMessage(config.coderApiUrl), { parse_mode: 'Markdown' });
 });
 
-// ─── Group chat commands ──────────────────────────────────────────────────────
-bot.command('set_task', async (ctx) => {
-  const chatId = ctx.chat.id;
-  const userId = ctx.from.id;
-  if (!isGroupChat(chatId)) {
-    await ctx.reply('This command works only in group chats.');
-    return;
-  }
-  const args = ctx.message.text.split(/\s+/).slice(1);
-  const taskId = args[0];
-  if (!taskId) {
-    await ctx.reply('Usage: /set\\_task `<taskId>`', { parse_mode: 'Markdown' });
-    return;
-  }
-  const client = getCoderClient(userId);
-  if (!client) {
-    await ctx.reply('You need to configure your API key first. DM me /start.');
-    return;
-  }
-  try {
-    const task = await client.getTask(taskId);
-    // Remove previous binding if any
-    const prev = groupTaskStore.get(chatId);
-    if (prev) {
-      taskSessions.remove(prev.taskId, prev.ownerUserId);
-    }
-    // Bind task to this group
-    groupTaskStore.set(chatId, taskId, userId);
-    taskSessions.register(taskId, chatId, userId);
-    taskSessions.updateStatus(taskId, userId, task.status, task.current_state?.state);
-    const cardMsgId = await sendCard(bot, chatId, task);
-    taskSessions.setCardMessageId(taskId, userId, cardMsgId);
-    groupTaskStore.setCardMessageId(chatId, cardMsgId);
-    log.info('group task set', { chatId, taskId, userId });
-  } catch (err) {
-    await handleCoderError(ctx, err, userId);
-  }
-});
-
-bot.command('unset_task', async (ctx) => {
-  const chatId = ctx.chat.id;
-  if (!isGroupChat(chatId)) {
-    await ctx.reply('This command works only in group chats.');
-    return;
-  }
-  const binding = groupTaskStore.get(chatId);
-  if (!binding) {
-    await ctx.reply('No task is bound to this group.');
-    return;
-  }
-  taskSessions.remove(binding.taskId, binding.ownerUserId);
-  groupTaskStore.remove(chatId);
-  await ctx.reply('Task unbound from this group.');
-  log.info('group task unset', { chatId, taskId: binding.taskId });
-});
-
-bot.command('task_status', async (ctx) => {
-  const chatId = ctx.chat.id;
-  if (!isGroupChat(chatId)) return;
-  const binding = groupTaskStore.get(chatId);
-  if (!binding) {
-    await ctx.reply('No task is bound to this group. Use /set\\_task `<taskId>`', { parse_mode: 'Markdown' });
-    return;
-  }
-  const client = getCoderClient(binding.ownerUserId);
-  if (!client) {
-    await ctx.reply('Task owner\'s API key is no longer valid.');
-    return;
-  }
-  try {
-    const task = await client.getTask(binding.taskId);
-    const presetName = taskSessions.getPresetName(binding.taskId, binding.ownerUserId);
-    const lastPrompt = taskSessions.get(binding.taskId, binding.ownerUserId)?.lastPrompt;
-    const cardMsgId = await sendCard(bot, chatId, task, { presetName, lastPrompt });
-    taskSessions.setCardMessageId(binding.taskId, binding.ownerUserId, cardMsgId);
-    groupTaskStore.setCardMessageId(chatId, cardMsgId);
-  } catch (err) {
-    await handleCoderError(ctx, err, binding.ownerUserId);
-  }
-});
-
 // ─── Unified text handler ─────────────────────────────────────────────────────
 bot.on('text', async (ctx) => {
   const chatId = ctx.chat.id;
   const userId = ctx.from.id;
   const text = sanitizeText(ctx.message.text);
-
-  // ─── Group chat routing ──────────────────────────────────────────────────
-  if (isGroupChat(chatId)) {
-    const binding = groupTaskStore.get(chatId);
-    if (!binding) return; // no task bound → ignore
-
-    const client = getCoderClient(binding.ownerUserId);
-    if (!client) return;
-
-    // Reply to task card/log → append prompt
-    if (ctx.message.reply_to_message) {
-      const repliedMsgId = ctx.message.reply_to_message.message_id;
-      const match = groupTaskStore.findByReplyMessageId(chatId, repliedMsgId);
-      if (match) {
-        log.info('group task append via reply', { taskId: binding.taskId, fromUserId: userId });
-        try {
-          await client.appendTaskPrompt(binding.taskId, text);
-          taskSessions.setLastPrompt(binding.taskId, binding.ownerUserId, text);
-          const task = await client.getTask(binding.taskId);
-          const cardMsgId = taskSessions.getCardMessageId(binding.taskId, binding.ownerUserId);
-          if (cardMsgId) {
-            await updateCard(bot, chatId, cardMsgId, task, { lastPrompt: text });
-          }
-        } catch (err) {
-          await handleCoderError(ctx, err, binding.ownerUserId);
-        }
-        return;
-      }
-    }
-
-    // @mention → append prompt
-    const mentionText = extractMentionText(ctx.message.text, getBotUsername());
-    if (mentionText) {
-      const sanitized = sanitizeText(mentionText);
-      log.info('group task append via mention', { taskId: binding.taskId, fromUserId: userId });
-      try {
-        await client.appendTaskPrompt(binding.taskId, sanitized);
-        taskSessions.setLastPrompt(binding.taskId, binding.ownerUserId, sanitized);
-        const task = await client.getTask(binding.taskId);
-        const cardMsgId = taskSessions.getCardMessageId(binding.taskId, binding.ownerUserId);
-        if (cardMsgId) {
-          await updateCard(bot, chatId, cardMsgId, task, { lastPrompt: sanitized });
-        }
-      } catch (err) {
-        await handleCoderError(ctx, err, binding.ownerUserId);
-      }
-      return;
-    }
-
-    // Regular message → ignore
-    return;
-  }
 
   // Priority 0: key setup flow
   if (uiState.isPendingKeySetup(chatId)) {
@@ -324,5 +185,4 @@ await bot.telegram.setMyCommands([
 startPoller(bot, config.pollIntervalMs);
 log.info('bot starting');
 await bot.launch();
-setBotUsername(bot.botInfo!.username);
-log.info('bot running', { username: bot.botInfo!.username });
+log.info('bot running');

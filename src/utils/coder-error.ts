@@ -21,5 +21,12 @@ export async function handleCoderError(ctx: Context, err: unknown, userId: numbe
     );
     return;
   }
-  await ctx.reply(`Error: ${err instanceof Error ? err.message : String(err)}`);
+  const message = err instanceof Error ? err.message : String(err);
+
+  if (message.includes('not ready to accept input')) {
+    await ctx.reply('⏳ Task is still starting up — wait a moment and try again.');
+    return;
+  }
+
+  await ctx.reply(`Error: ${message}`);
 }

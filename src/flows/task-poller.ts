@@ -6,6 +6,8 @@ import { extractLastResponse } from '../utils/log-parser.js';
 import { log } from '../utils/logger.js';
 import { CoderAuthError } from '../utils/coder-error.js';
 import { userStore } from '../store/user-store.js';
+import { groupTaskStore } from '../store/group-tasks.js';
+import { isGroupChat } from '../utils/group-chat.js';
 
 let polling = false;
 
@@ -84,6 +86,7 @@ async function doPoll(bot: Telegraf): Promise<void> {
             presetName,
           });
           taskSessions.setCardMessageId(taskId, userId, newMsgId);
+          if (isGroupChat(chatId)) groupTaskStore.setCardMessageId(chatId, newMsgId);
         }
       }
 
@@ -103,6 +106,7 @@ async function doPoll(bot: Telegraf): Promise<void> {
         if (!cardMessageId) {
           const msgId = await sendCard(bot, chatId, task);
           taskSessions.setCardMessageId(taskId, userId, msgId);
+          if (isGroupChat(chatId)) groupTaskStore.setCardMessageId(chatId, msgId);
         }
       } else if (taskSessions.isPendingLogSend(taskId, userId) && agentState === 'idle') {
         // Second cycle — still idle, logs should be ready now
@@ -116,6 +120,7 @@ async function doPoll(bot: Telegraf): Promise<void> {
             const durationMs = startedAt ? Date.now() - startedAt : undefined;
             const logMsgId = await sendLogMessage(bot, chatId, task, cleaned, lastPrompt, durationMs);
             taskSessions.setLogMessageId(taskId, userId, logMsgId);
+            if (isGroupChat(chatId)) groupTaskStore.setLogMessageId(chatId, logMsgId);
           } catch (err) {
             log.warn('completion log message failed', { taskId, err: String(err) });
           }

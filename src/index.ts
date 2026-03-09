@@ -60,6 +60,25 @@ bot.use(async (ctx, next) => {
   return next();
 });
 
+// ─── Middleware: block buttons and non-group commands in groups ───────────────
+const groupCommands = new Set(['set_task', 'unset_task', 'task_status']);
+bot.use(async (ctx, next) => {
+  const chatId = ctx.chat?.id ?? 0;
+  if (isGroupChat(chatId)) {
+    // Block all callback queries (no buttons in groups)
+    if ('callbackQuery' in ctx.update) return;
+    // Block non-group commands
+    if (ctx.message && 'text' in ctx.message) {
+      const text = ctx.message.text;
+      if (text.startsWith('/')) {
+        const cmd = text.split(/[@\s]/)[0].slice(1);
+        if (!groupCommands.has(cmd)) return;
+      }
+    }
+  }
+  return next();
+});
+
 // ─── Middleware: clear pending text input on any button press ─────────────────
 bot.use(async (ctx, next) => {
   if ('callbackQuery' in ctx.update && ctx.chat?.id) {
@@ -124,7 +143,7 @@ bot.command('set_task', async (ctx) => {
     groupTaskStore.set(chatId, taskId, userId);
     taskSessions.register(taskId, chatId, userId);
     taskSessions.updateStatus(taskId, userId, task.status, task.current_state?.state);
-    const cardMsgId = await sendCard(bot, chatId, task);
+    const cardMsgId = await sendCard(bot, chatId, task, { noKeyboard: true });
     taskSessions.setCardMessageId(taskId, userId, cardMsgId);
     groupTaskStore.setCardMessageId(chatId, cardMsgId);
     log.info('group task set', { chatId, taskId, userId });
@@ -167,7 +186,7 @@ bot.command('task_status', async (ctx) => {
     const task = await client.getTask(binding.taskId);
     const presetName = taskSessions.getPresetName(binding.taskId, binding.ownerUserId);
     const lastPrompt = taskSessions.get(binding.taskId, binding.ownerUserId)?.lastPrompt;
-    const cardMsgId = await sendCard(bot, chatId, task, { presetName, lastPrompt });
+    const cardMsgId = await sendCard(bot, chatId, task, { presetName, lastPrompt, noKeyboard: true });
     taskSessions.setCardMessageId(binding.taskId, binding.ownerUserId, cardMsgId);
     groupTaskStore.setCardMessageId(chatId, cardMsgId);
   } catch (err) {
@@ -201,7 +220,7 @@ bot.on('text', async (ctx) => {
           const task = await client.getTask(binding.taskId);
           const cardMsgId = taskSessions.getCardMessageId(binding.taskId, binding.ownerUserId);
           if (cardMsgId) {
-            await updateCard(bot, chatId, cardMsgId, task, { lastPrompt: text });
+            await updateCard(bot, chatId, cardMsgId, task, { lastPrompt: text, noKeyboard: true });
           }
         } catch (err) {
           await handleCoderError(ctx, err, binding.ownerUserId);
@@ -221,7 +240,7 @@ bot.on('text', async (ctx) => {
         const task = await client.getTask(binding.taskId);
         const cardMsgId = taskSessions.getCardMessageId(binding.taskId, binding.ownerUserId);
         if (cardMsgId) {
-          await updateCard(bot, chatId, cardMsgId, task, { lastPrompt: sanitized });
+          await updateCard(bot, chatId, cardMsgId, task, { lastPrompt: sanitized, noKeyboard: true });
         }
       } catch (err) {
         await handleCoderError(ctx, err, binding.ownerUserId);

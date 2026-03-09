@@ -1,13 +1,11 @@
 export interface WizardState {
-  step: 1 | 2 | 3 | 4;
+  step: 1 | 2 | 3;
   mode: 'task' | 'workspace';
   templateName?: string;
   templateVersionId?: string;
   presetId?: string;
   presetName?: string;
   messageId?: number;
-  prompt?: string;
-  shared?: boolean;
 }
 
 interface UiState {

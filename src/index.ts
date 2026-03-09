@@ -1,4 +1,4 @@
-import { bot, getCoderClient } from './bot.js';
+import { bot, getCoderClient, setBotUsername, getBotUsername } from './bot.js';
 import { config } from './config.js';
 import { startCommand, keySetupMessage } from './commands/start.js';
 import { tasksListCommand } from './commands/tasks/list.js';
@@ -21,6 +21,7 @@ import { updateCard } from './ui/task-card.js';
 import { CoderClient } from './coder/client.js';
 import { log } from './utils/logger.js';
 import { handleCoderError } from './utils/coder-error.js';
+import { isGroupChat, extractMentionText } from './utils/group-chat.js';
 
 // ─── Middleware: update logger ────────────────────────────────────────────────
 bot.use((ctx, next) => {
@@ -45,6 +46,10 @@ bot.use(async (ctx, next) => {
   if (!userId) {
     await ctx.reply('You don\'t have access to this bot. Contact the administrator to be added.');
     return;
+  }
+  // In group chats, allow all members through (no user store check)
+  if (isGroupChat(ctx.chat?.id ?? 0)) {
+    return next();
   }
   // If admins are configured, enforce access control via user store
   if (config.adminUsers.size > 0 && !userStore.isAllowed(userId)) {
@@ -93,6 +98,73 @@ bot.on('text', async (ctx) => {
   const chatId = ctx.chat.id;
   const userId = ctx.from.id;
   const text = sanitizeText(ctx.message.text);
+
+  // ─── Group chat routing ──────────────────────────────────────────────────
+  if (isGroupChat(chatId)) {
+    // Reply to task card/log → append prompt to that task
+    if (ctx.message.reply_to_message) {
+      const repliedMsgId = ctx.message.reply_to_message.message_id;
+      const match = taskSessions.findGroupTaskByReplyMessageId(chatId, repliedMsgId);
+      if (match) {
+        const client = getCoderClient(match.userId);
+        if (!client) {
+          await ctx.reply('Task owner\'s API key is no longer valid.');
+          return;
+        }
+        log.info('group task append via reply', { taskId: match.taskId, fromUserId: userId, ownerUserId: match.userId });
+        try {
+          await client.appendTaskPrompt(match.taskId, text);
+          taskSessions.setLastPrompt(match.taskId, match.userId, text);
+          const task = await client.getTask(match.taskId);
+          const cardMsgId = taskSessions.getCardMessageId(match.taskId, match.userId);
+          if (cardMsgId) {
+            await updateCard(bot, chatId, cardMsgId, task, { lastPrompt: text });
+          }
+        } catch (err) {
+          await handleCoderError(ctx, err, match.userId);
+        }
+        return;
+      }
+    }
+
+    // @mention → feed to wizard or append to active group task
+    const mentionText = extractMentionText(ctx.message.text, getBotUsername());
+    if (mentionText) {
+      const sanitized = sanitizeText(mentionText);
+      const wizard = uiState.getWizard(chatId);
+      if (wizard?.step === 3) {
+        await handleWizardPromptInput(ctx, sanitized, wizard);
+        return;
+      }
+      // Try to append to the most recent active group task
+      const activeTask = taskSessions.findActiveGroupTask(chatId);
+      if (activeTask) {
+        const client = getCoderClient(activeTask.userId);
+        if (!client) {
+          await ctx.reply('Task owner\'s API key is no longer valid.');
+          return;
+        }
+        log.info('group task append via mention', { taskId: activeTask.taskId, fromUserId: userId, ownerUserId: activeTask.userId });
+        try {
+          await client.appendTaskPrompt(activeTask.taskId, sanitized);
+          taskSessions.setLastPrompt(activeTask.taskId, activeTask.userId, sanitized);
+          const task = await client.getTask(activeTask.taskId);
+          const cardMsgId = taskSessions.getCardMessageId(activeTask.taskId, activeTask.userId);
+          if (cardMsgId) {
+            await updateCard(bot, chatId, cardMsgId, task, { lastPrompt: sanitized });
+          }
+        } catch (err) {
+          await handleCoderError(ctx, err, activeTask.userId);
+        }
+      } else {
+        await ctx.reply('No active task in this group. Create one with /task\\_create');
+      }
+      return;
+    }
+
+    // Regular message in group → ignore
+    return;
+  }
 
   // Priority 0: key setup flow
   if (uiState.isPendingKeySetup(chatId)) {
@@ -185,4 +257,5 @@ await bot.telegram.setMyCommands([
 startPoller(bot, config.pollIntervalMs);
 log.info('bot starting');
 await bot.launch();
-log.info('bot running');
+setBotUsername(bot.botInfo!.username);
+log.info('bot running', { username: bot.botInfo!.username });

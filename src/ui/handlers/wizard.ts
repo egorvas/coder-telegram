@@ -2,6 +2,7 @@ import type { Telegraf, Context } from 'telegraf';
 import { bot, getCoderClient } from '../../bot.js';
 import { uiState, type WizardState } from '../state.js';
 import { taskSessions } from '../../store/task-sessions.js';
+import { Markup } from 'telegraf';
 import {
   wizardTemplateKeyboard,
   wizardPresetKeyboard,
@@ -13,6 +14,7 @@ import { showWorkspaceList } from './workspace-menu.js';
 import { config } from '../../config.js';
 import { handleCoderError } from '../../utils/coder-error.js';
 import { log } from '../../utils/logger.js';
+import { isGroupChat } from '../../utils/group-chat.js';
 
 function randomSuffix(): string {
   return Math.random().toString(36).slice(2, 6);
@@ -128,8 +130,10 @@ async function createFromWizard(ctx: Context, wizard: WizardState, prompt: strin
     try {
       const task = await client.createTask(templateVersionId, presetId ?? null, prompt);
       const userId = ctx.from?.id ?? chatId;
-      log.info('task created', { taskId: task.id, template: templateName, preset: presetName, userId });
+      const shared = wizard.shared === true;
+      log.info('task created', { taskId: task.id, template: templateName, preset: presetName, userId, shared });
       taskSessions.register(task.id, chatId, userId);
+      if (shared) taskSessions.setGroupChat(task.id, userId);
       if (presetName) taskSessions.setPresetName(task.id, userId, presetName);
       const cardMsgId = await sendCard(bot, chatId, task, { presetName });
       taskSessions.setCardMessageId(task.id, userId, cardMsgId);
@@ -145,6 +149,24 @@ export async function handleWizardPromptInput(
   promptText: string,
   wizard: WizardState
 ): Promise<void> {
+  const chatId = ctx.chat?.id;
+  if (!chatId) return;
+
+  // In group chats, ask whether to share the task
+  if (isGroupChat(chatId)) {
+    const text = `*Access* — Who can interact with this task?`;
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🌐 Shared with group', 'wizard:shared'),
+        Markup.button.callback('🔒 Only me', 'wizard:private'),
+      ],
+      [Markup.button.callback('« Back', 'wizard:back')],
+    ]);
+    const msgId = await editOrSend(ctx, chatId, wizard.messageId, text, keyboard);
+    uiState.setWizard(chatId, { ...wizard, step: 4, prompt: promptText, messageId: msgId });
+    return;
+  }
+
   await createFromWizard(ctx, wizard, promptText);
 }
 
@@ -227,6 +249,25 @@ export function registerWizardHandlers(bot: Telegraf): void {
     uiState.setWizard(chatId, { ...wizard, step: 3, presetId, presetName, messageId: msgId });
   });
 
+  // wizard:shared / wizard:private → step 4: create task with chosen access
+  bot.action('wizard:shared', async (ctx) => {
+    const chatId = ctx.chat?.id;
+    if (!chatId) return;
+    await ctx.answerCbQuery();
+    const wizard = uiState.getWizard(chatId);
+    if (!wizard || wizard.step !== 4 || !wizard.prompt) return;
+    await createFromWizard(ctx, { ...wizard, shared: true }, wizard.prompt);
+  });
+
+  bot.action('wizard:private', async (ctx) => {
+    const chatId = ctx.chat?.id;
+    if (!chatId) return;
+    await ctx.answerCbQuery();
+    const wizard = uiState.getWizard(chatId);
+    if (!wizard || wizard.step !== 4 || !wizard.prompt) return;
+    await createFromWizard(ctx, { ...wizard, shared: false }, wizard.prompt);
+  });
+
   // wizard:skip → workspace mode: create without prompt
   bot.action('wizard:skip', async (ctx) => {
     const chatId = ctx.chat?.id;
@@ -265,7 +306,14 @@ export function registerWizardHandlers(bot: Telegraf): void {
     if (!wizard) return;
 
     try {
-      if (wizard.step === 2) {
+      if (wizard.step === 4) {
+        // Back from access choice → re-show prompt input
+        const canSkip = wizard.mode === 'workspace';
+        const text = '*Step 3/3* — Enter a prompt' + (canSkip ? ' or skip:' : ':');
+        const keyboard = promptKeyboard(canSkip);
+        const msgId = await editOrSend(ctx, chatId, wizard.messageId, text, keyboard);
+        uiState.setWizard(chatId, { ...wizard, step: 3, prompt: undefined, messageId: msgId });
+      } else if (wizard.step === 2) {
         const templates = await client.listTemplates();
         const text = '*Step 1/3* — Select a template:';
         const keyboard = wizardTemplateKeyboard(templates);

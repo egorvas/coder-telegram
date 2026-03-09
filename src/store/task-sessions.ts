@@ -13,6 +13,7 @@ interface TaskSession {
   presetName?: string;
   workingStartedAt?: number;
   pendingLogSend?: boolean;
+  groupChat?: boolean;
 }
 
 interface UserData {
@@ -193,6 +194,38 @@ class TaskSessionStore {
     for (const [taskId, session] of user.sessions) {
       if (session.chatId === chatId && (session.cardMessageId === messageId || session.logMessageId === messageId)) {
         return { taskId };
+      }
+    }
+    return null;
+  }
+
+  findGroupTaskByReplyMessageId(chatId: number, messageId: number): { taskId: string; userId: number } | null {
+    for (const [userId, { sessions }] of this.users) {
+      for (const [taskId, session] of sessions) {
+        if (session.chatId === chatId && session.groupChat &&
+            (session.cardMessageId === messageId || session.logMessageId === messageId)) {
+          return { taskId, userId };
+        }
+      }
+    }
+    return null;
+  }
+
+  setGroupChat(taskId: string, userId: number): void {
+    const session = this.users.get(userId)?.sessions.get(taskId);
+    if (session) {
+      session.groupChat = true;
+      this.save();
+    }
+  }
+
+  findActiveGroupTask(chatId: number): { taskId: string; userId: number } | null {
+    for (const [userId, { sessions }] of this.users) {
+      for (const [taskId, session] of sessions) {
+        if (session.chatId === chatId && session.groupChat &&
+            session.lastKnownStatus === 'active') {
+          return { taskId, userId };
+        }
       }
     }
     return null;

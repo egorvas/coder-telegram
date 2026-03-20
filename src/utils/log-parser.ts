@@ -10,7 +10,7 @@ export function stripAnsi(text: string): string {
 
 // Claude Code UI markers
 const ASSISTANT_MARKER = /^●\s*/;        // ● = start of assistant response
-const SEPARATOR_RE = /^[─━]{3,}$|^[╌]{3,}$/; // ─── or ━━━ or ╌╌╌ = separators
+const SEPARATOR_RE = /^[-─━]{3,}$|^[╌]{3,}$/; // --- or ─── or ━━━ or ╌╌╌ = separators
 const USER_PROMPT_RE = /^❯\s/;           // ❯ = user input
 const SYSTEM_RE = /^✻\s/;               // ✻ = system event (compacted, crunched)
 const PERMISSION_RE = /^⏵/;             // ⏵⏵ bypass permissions
@@ -79,6 +79,31 @@ function collectBlock(lines: string[], startIdx: number, stripMarker: boolean): 
  * 3. If still short, try the previous ● block.
  * 4. Fallback: last non-noise block.
  */
+/**
+ * Strip leading/trailing separator lines (---, ───, ━━━, ╌╌╌) and
+ * trailing prompt markers (❯) that leak from the terminal UI.
+ */
+function cleanEdges(text: string): string {
+  const lines = text.split('\n');
+
+  // Strip leading separators
+  while (lines.length > 0 && SEPARATOR_RE.test(lines[0].trim())) {
+    lines.shift();
+  }
+
+  // Strip trailing separators and lone ❯ prompts
+  while (lines.length > 0) {
+    const last = lines[lines.length - 1].trim();
+    if (SEPARATOR_RE.test(last) || last === '❯' || last === '') {
+      lines.pop();
+    } else {
+      break;
+    }
+  }
+
+  return lines.join('\n').trim();
+}
+
 export function extractLastResponse(rawLogs: string): string {
   if (!rawLogs) return '';
 
@@ -94,7 +119,7 @@ export function extractLastResponse(rawLogs: string): string {
   }
 
   if (markers.length === 0) {
-    return extractFallback(lines);
+    return cleanEdges(extractFallback(lines));
   }
 
   // Filter out MCP noise markers (e.g. coder_report_task)
@@ -104,7 +129,7 @@ export function extractLastResponse(rawLogs: string): string {
   });
 
   if (validMarkers.length === 0) {
-    return extractFallback(lines);
+    return cleanEdges(extractFallback(lines));
   }
 
   // Try last valid ● block
@@ -112,7 +137,7 @@ export function extractLastResponse(rawLogs: string): string {
   const block = collectBlock(lines, lastIdx, true);
 
   if (block.length >= TRIVIAL_THRESHOLD) {
-    return block;
+    return cleanEdges(block);
   }
 
   // Block was trivially short — try previous ● block
@@ -120,13 +145,13 @@ export function extractLastResponse(rawLogs: string): string {
     const prevIdx = validMarkers[validMarkers.length - 2];
     const prevBlock = collectBlock(lines, prevIdx, true);
     if (prevBlock.length > block.length) {
-      return prevBlock;
+      return cleanEdges(prevBlock);
     }
   }
 
   // Still short — fallback
-  if (block.length > 0) return block;
-  return extractFallback(lines);
+  if (block.length > 0) return cleanEdges(block);
+  return cleanEdges(extractFallback(lines));
 }
 
 /**

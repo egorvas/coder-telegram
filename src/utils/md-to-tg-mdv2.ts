@@ -8,6 +8,8 @@
  * escaping everything else.
  */
 
+import { unwrapParagraphs } from './unwrap-paragraphs.js';
+
 const SPECIAL = /[_*[\]()~`>#+\-=|{}.!\\]/g;
 
 /** Escape all MarkdownV2 special characters in plain text */
@@ -121,7 +123,7 @@ function convertInline(line: string): string {
 export function markdownToTelegramMdV2(md: string): string {
   if (!md) return '';
 
-  const { text, blocks } = extractCodeBlocks(md);
+  const { text, blocks } = extractCodeBlocks(unwrapParagraphs(md));
   const lines = text.split('\n');
   const result: string[] = [];
 

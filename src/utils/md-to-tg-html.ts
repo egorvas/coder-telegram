@@ -5,6 +5,8 @@
  * Unsupported constructs (images, tables, horizontal rules) are passed through as text.
  */
 
+import { unwrapParagraphs } from './unwrap-paragraphs.js';
+
 /** Escape characters that are special in HTML */
 function esc(text: string): string {
   return text
@@ -66,7 +68,7 @@ function convertInline(line: string): string {
 export function markdownToTelegramHtml(md: string): string {
   if (!md) return '';
 
-  const { text, blocks } = extractCodeBlocks(md);
+  const { text, blocks } = extractCodeBlocks(unwrapParagraphs(md));
   const lines = text.split('\n');
   const result: string[] = [];
 

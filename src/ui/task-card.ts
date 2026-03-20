@@ -1,8 +1,11 @@
 import type { Telegraf } from 'telegraf';
 import type { CoderTask } from '../coder/types.js';
+import { config, type ReportFormat } from '../config.js';
 import { taskCardKeyboard } from './keyboards.js';
-import { sanitizeText, fitLogs, splitForTelegram } from '../utils/telegram.js';
+import { sanitizeText, fitLogs, splitForTelegram, splitHtmlForTelegram } from '../utils/telegram.js';
 import { stripAnsi } from '../utils/log-parser.js';
+import { markdownToTelegramHtml } from '../utils/md-to-tg-html.js';
+import { markdownToTelegramMdV2 } from '../utils/md-to-tg-mdv2.js';
 import { log } from '../utils/logger.js';
 
 const TG_LIMIT = 4096;
@@ -116,10 +119,89 @@ function formatDuration(ms: number): string {
   return remMin > 0 ? `${hr}h ${remMin}m` : `${hr}h`;
 }
 
+// --- Report format helpers ---------------------------------------------------
+
+function escHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+const MDV2_SPECIAL = /[_*[\]()~`>#+\-=|{}.!\\]/g;
+function escMdV2(text: string): string {
+  return text.replace(MDV2_SPECIAL, '\\$&');
+}
+
+interface FormatParts {
+  header: string;
+  noLogs: string;
+  parseMode: 'Markdown' | 'MarkdownV2' | 'HTML';
+  formatBody: (body: string) => string;
+  splitFn: (header: string, body: string) => string[];
+}
+
+function getFormatParts(
+  name: string,
+  durationStr: string,
+  lastPrompt: string | undefined,
+  fmt: ReportFormat
+): FormatParts {
+  switch (fmt) {
+    case 'html': {
+      const en = escHtml(name);
+      let header = `📝 <b>${en}</b> — Report${escHtml(durationStr)}`;
+      if (lastPrompt) {
+        const t = lastPrompt.slice(0, 200);
+        const e = lastPrompt.length > 200 ? '…' : '';
+        header += `\n\n<blockquote>${escHtml(t)}${e}</blockquote>`;
+      }
+      return {
+        header,
+        noLogs: `${header}\n\n<i>No logs yet.</i>`,
+        parseMode: 'HTML',
+        formatBody: markdownToTelegramHtml,
+        splitFn: splitHtmlForTelegram,
+      };
+    }
+    case 'markdown': {
+      const en = escMdV2(name);
+      let header = `📝 *${en}* — Report${escMdV2(durationStr)}`;
+      if (lastPrompt) {
+        const t = lastPrompt.slice(0, 200);
+        const e = lastPrompt.length > 200 ? '…' : '';
+        header += `\n\n>${escMdV2(t)}${e}`;
+      }
+      return {
+        header,
+        noLogs: `${header}\n\n_No logs yet\\._`,
+        parseMode: 'MarkdownV2',
+        formatBody: markdownToTelegramMdV2,
+        splitFn: splitHtmlForTelegram, // same splitting logic (no code-block wrapping)
+      };
+    }
+    default: {
+      // 'code' — original behavior: wrap in code block
+      let header = `📝 *${name}* — Report${durationStr}`;
+      if (lastPrompt) {
+        const t = lastPrompt.slice(0, 200);
+        const e = lastPrompt.length > 200 ? '…' : '';
+        header += `\n\n> ${t}${e}`;
+      }
+      return {
+        header,
+        noLogs: `${header}\n\n_No logs yet._`,
+        parseMode: 'Markdown',
+        formatBody: (body: string) => body, // splitForTelegram wraps in ```
+        splitFn: splitForTelegram,
+      };
+    }
+  }
+}
+
 /**
  * Send a log message with the AI's response. User can reply to it to continue.
  * For long responses, splits into multiple messages (reply-chained).
  * Returns the first message_id.
+ *
+ * The format is controlled by REPORT_FORMAT env var: code | markdown | html.
  */
 export async function sendLogMessage(
   bot: Telegraf,
@@ -131,32 +213,25 @@ export async function sendLogMessage(
 ): Promise<number> {
   const name = task.display_name || task.name;
   const durationStr = durationMs ? ` (${formatDuration(durationMs)})` : '';
-  let header = `📝 *${name}* — Report${durationStr}`;
-
-  if (lastPrompt) {
-    const trimmed = lastPrompt.slice(0, 200);
-    const ellipsis = lastPrompt.length > 200 ? '…' : '';
-    header += `\n\n> ${trimmed}${ellipsis}`;
-  }
+  const fmt = getFormatParts(name, durationStr, lastPrompt, config.reportFormat);
 
   if (!cleanedLogs) {
-    const msg = await bot.telegram.sendMessage(chatId, `${header}\n\n_No logs yet._`, {
-      parse_mode: 'Markdown',
+    const msg = await bot.telegram.sendMessage(chatId, fmt.noLogs, {
+      parse_mode: fmt.parseMode,
     });
     return msg.message_id;
   }
 
-  const chunks = splitForTelegram(header, cleanedLogs);
+  const body = fmt.formatBody(cleanedLogs);
+  const chunks = fmt.splitFn(fmt.header, body);
 
-  // Send first message
   const firstMsg = await bot.telegram.sendMessage(chatId, chunks[0], {
-    parse_mode: 'Markdown',
+    parse_mode: fmt.parseMode,
   });
 
-  // Send remaining chunks as replies to the first message
   for (let i = 1; i < chunks.length; i++) {
     await bot.telegram.sendMessage(chatId, chunks[i], {
-      parse_mode: 'Markdown',
+      parse_mode: fmt.parseMode,
       reply_parameters: { message_id: firstMsg.message_id },
     });
   }

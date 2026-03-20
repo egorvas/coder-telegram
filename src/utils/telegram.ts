@@ -78,6 +78,35 @@ export function splitForTelegram(header: string, body: string): string[] {
   return messages;
 }
 
+/**
+ * Split an HTML-formatted body into multiple Telegram messages.
+ * First chunk includes the header; subsequent chunks are plain continuations.
+ * Splits at line boundaries to avoid cutting tags mid-way.
+ */
+export function splitHtmlForTelegram(header: string, body: string): string[] {
+  const safeLimit = TG_LIMIT - 80; // larger margin for HTML tags
+
+  const firstAvailable = safeLimit - header.length - 2; // 2 = \n\n
+  if (body.length <= firstAvailable) {
+    return [`${header}\n\n${body}`];
+  }
+
+  const messages: string[] = [];
+  let remaining = body;
+
+  const firstChunk = cutAtLineBreak(remaining, firstAvailable);
+  messages.push(`${header}\n\n${firstChunk}`);
+  remaining = remaining.slice(firstChunk.length).replace(/^\n/, '');
+
+  while (remaining.length > 0) {
+    const chunk = cutAtLineBreak(remaining, safeLimit);
+    messages.push(chunk);
+    remaining = remaining.slice(chunk.length).replace(/^\n/, '');
+  }
+
+  return messages;
+}
+
 function cutAtLineBreak(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text;
   const lastNl = text.lastIndexOf('\n', maxLen);

@@ -48,6 +48,7 @@ cp .env.example .env
 | `POLL_INTERVAL_MS` | — | How often to poll task status in ms (default: `15000`) |
 | `SESSION_FILE` | — | Path to persistence file (default: `./data/sessions.json`) |
 | `LOG_LEVEL` | — | `debug` / `info` / `warn` / `error` (default: `info`) |
+| `REPORT_FORMAT` | — | How AI task results are formatted: `code` (monospace code block, default), `markdown` (MarkdownV2 rich text), `html` (HTML rich text) |
 
 > **API keys**: each user enters their own Coder API token via `/start`. Tokens are stored per-user in the session file.
 

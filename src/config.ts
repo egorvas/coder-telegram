@@ -14,6 +14,16 @@ function parseIdList(env: string | undefined): Set<number> {
   );
 }
 
+export type ReportFormat = 'code' | 'markdown' | 'html';
+
+const REPORT_FORMATS = new Set<string>(['code', 'markdown', 'html']);
+
+function parseReportFormat(env: string | undefined): ReportFormat {
+  const val = (env ?? 'code').toLowerCase();
+  if (REPORT_FORMATS.has(val)) return val as ReportFormat;
+  return 'code';
+}
+
 export const config = {
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN!,
   coderApiUrl: process.env.CODER_API_URL!.replace(/\/$/, ''),
@@ -21,4 +31,5 @@ export const config = {
   sessionFile: process.env.SESSION_FILE ?? './data/sessions.json',
   adminUsers: parseIdList(process.env.ADMIN_USERS),
   logLevel: process.env.LOG_LEVEL ?? 'info',
+  reportFormat: parseReportFormat(process.env.REPORT_FORMAT),
 };

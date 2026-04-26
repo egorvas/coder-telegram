@@ -91,11 +91,14 @@ async function doPoll(bot: Telegraf): Promise<void> {
       // We delay log sending by one poll cycle to ensure logs are fully written.
       const wasWorking = lastKnownAgentState === 'working' || lastKnownAgentState === 'complete';
       const aiFinished = agentState === 'idle' && wasWorking && status === 'active';
+      // Race condition: agent can go idle while status is still 'initializing',
+      // then status flips to 'active' on the next poll — catch that transition.
+      const becameActiveWhileIdle = status === 'active' && lastKnownStatus !== 'active' && agentState === 'idle' && lastKnownAgentState === 'idle';
       const firstSeenDone = agentState === 'idle' && lastKnownAgentState === undefined && status === 'active';
       const terminalStatuses = ['stopped', 'error', 'unknown'];
       const hitTerminal = terminalStatuses.includes(status) && !terminalStatuses.includes(lastKnownStatus ?? '');
 
-      if (aiFinished || firstSeenDone || hitTerminal) {
+      if (aiFinished || becameActiveWhileIdle || firstSeenDone || hitTerminal) {
         // Mark for log send on next cycle (logs may not be ready yet)
         taskSessions.setPendingLogSend(taskId, userId, true);
 
